@@ -1,0 +1,473 @@
+%{
+
+*********************************************************************
+
+*  Job: Gemini Order Tracking                                       *
+*********************************************************************
+%}
+
+%INCLUDE "$(baseVar)"
+%INCLUDE "EditRoutines.icl"
+%INCLUDE "ErrorMessage.icl"
+%INCLUDE "GenericDirectCallVariables.icl"
+%INCLUDE "Menu.icl"
+%INCLUDE "NewWindowVariables.icl"
+%INCLUDE "NumFormat.icl"
+%INCLUDE "SystemControl$(dataBaseID).icl"
+%INCLUDE "VarBase.icl"
+%INCLUDE "WildCard.icl"
+
+
+%Define {
+  page_title              = "SAM Gemini Order Tracking"
+  d2wName                 = "SAM.d2w"
+  d2wVarBase              = "$(genericVarBase)&amp;orderNumber=@dtw_rurlescseq(orderNumber)"
+  nextPrevVar             = "$(d2wVarBase)"
+  wildDftVar              = "REPORT$(d2wVarBase)"
+  currentURL              = "$(d2wName)/REPORT$(d2wVarBase)&amp;START_ROW_NUM=@dtw_rurlescseq(START_ROW_NUM)"
+  DATABASE                = "*Local"
+  DTW_DEFAULT_REPORT      = "NO"
+  ROW_NUM                 = "0"
+  START_ROW_NUM           = "1"
+  DTW_PAD_PGM_PARMS       = "YES"
+  dspMaxRows              = "$(dspMaxRowsDft)"
+  prtMaxRows              = "$(prtMaxRowsDft)"
+  rowIndexNext            = "1"
+  totalPages              = "0"	
+  helpExt                 = ""
+%}
+
+
+%MACRO_FUNCTION Set_URL (INOUT workURL) {
+  @dtw_replace(workURL, "@@backHome", "@dtw_rurlescseq(backHome)", "1", "a", workURL)
+%}
+
+%MACRO_FUNCTION Set_SQL (INOUT stmtSQL) {
+  %if (orderNumber == "ALL")
+      @dtw_assign(helpExt, "")
+      @dtw_assign(page_title, "SAM Gemini Order Tracking")
+    %endif
+  %INCLUDE "$(docType)"
+  <html>
+      <head>
+	   %INCLUDE "$(headInclude)"
+          <script TYPE="text/javascript">
+              %INCLUDE "AJAXRequest.icl"
+              %INCLUDE "SaveCurrentURL.icl"
+	       %INCLUDE "numedit.icl"
+              %INCLUDE "CheckEnterSearch.icl"
+              function validate(searchForm) {
+                  if (editNum(document.Search.srchOrder, 8, 0))
+                      return true;
+              }
+          </script>
+          %INCLUDE "$(genericHead)"
+      </head>
+      <body $(bodyTagAttr) onKeyPress="checkEnterSearch()">
+          <!-- Start Of Banner Code -->
+          %INCLUDE "banner.icl"
+          <!-- End Of Banner Code -->
+          <table $(baseTable)>
+              <tr valign="top">
+                  %if (formatToPrint == "")
+                      %if (orderNumber == "ALL")
+                          @dtw_assign(pageID, "ALLORDERS")
+                      %endif
+                      <td class="menu">@Menu_Query(profileHandle, dataBaseID, portal, pageID)</td>
+                  %endif
+                  <td class="content">
+                     
+                      %INCLUDE "userview.icl"
+
+                      %INCLUDE "stmtSQLClear.icl"
+                      @dtw_concat(stmtSQL, " Select GMORD#, GMEMP#, GMWKSTN, GMWH, GMPCTCMP, DC_CYYMMDD, GMORDTOT, GMMINWK, GMWKSDSC2 ", stmtSQL)
+                      @dtw_concat(fileSQL, " GMTRK03 left join DATECONV on GMENDDT=DC_DATE ", fileSQL)
+
+ 		
+	%if (wildCardSearch!="" || gmord#>"0" || uv_Sql!="")
+                          @dtw_concat(selectSQL, "gmord#<>0 ", selectSQL)
+                      %endif
+                      %if (gmord# > "0")
+                          @dtw_concat(selectSQL, " and CMSLSM=$(salesmanNumber)", selectSQL)
+                      %endif
+
+
+
+
+
+                      %INCLUDE "stmtSQLSelect.icl"
+                      @dtw_concat(stmtSQL, " Order By $(orderBy) ", stmtSQL)
+                      %INCLUDE "stmtSQLEnd.icl"
+                      %INCLUDE "stmtSQLTotalRows.icl"
+                      @Order_Query(profileHandle, dataBaseID, stmtSQL)
+                  </td>
+              </tr>
+          </table>
+          <!-- Start Of Trailer Code -->
+          %INCLUDE "trailer.icl"
+          <!-- End Of Trailer Code -->
+      </body>
+  </html>
+%}
+
+%FUNCTION(dtw_sql) Order_Query (IN  CHAR(64)    profileHandle,
+				     CHAR(2)     dataBaseID,
+                                    CHAR(32000) stmtSQL)
+{CALL $(pgmLibrary)HSYSQL_W
+
+  %REPORT{
+      %INCLUDE "PageTitleWithPrint.icl"
+      %INCLUDE "ConfMessageDisplay.icl"
+      $(hrTagAttr)
+
+      %if (formatToPrint != "Y")
+          <form class="formClass" METHOD=POST NAME="Search" onSubmit="return validate(document.Search)" ACTION="$(homeURL)$(cGIPath)$(d2wName)/WILDCARD$(d2wVarBase)$(orderByVarBase)&amp;wildCardSearch=">
+              <table $(quickSearchTable)>
+
+                 
+                   <tr><th class="colhdr">Order<br>Number</th>
+                 
+                  </tr>
+
+
+                    <tr><td><input type="text" class="inputnmbr" name="srchOrder" size="10" maxlength="8">
+                          <input type="hidden" name="operOrder" value="=">
+                      </td>
+
+
+
+                      
+                      <td><a href="javascript:check(document.Search)">$(goSearchImage)</a></td>
+                  </tr>
+              </table>
+              <script TYPE="text/javascript"> 
+ 
+                  document.Search.srchOrder.focus();
+  
+              </script>
+          </form>
+
+          %INCLUDE "WildCardPage.icl"
+      %endif
+
+      <table $(contentTable)>
+          <tr>
+              @dtw_assign(orderByVar, "$(d2wVarBase)$(searchVarBase)")
+              @OrderBy_Sort("GMORD#", sortVar)
+              <th class="colhdr$(sortVar)"><a href="$(homeURL)$(cGIPath)$(d2wName)/ORDERBY$(orderByVar)&amp;sequence=OrderNumber" title="Sequence By Order Number">Order<br>Number</a></th>
+              
+
+              @OrderBy_Sort("GMEMP#", sortVar)
+              <th class="colhdr$(sortVar)"><a href="$(homeURL)$(cGIPath)$(d2wName)/ORDERBY$(orderByVar)&amp;sequence=EmpNumber" title="Sequence By Employee Number">Employee<br>Number</a></th>
+
+              @OrderBy_Sort("GMWKSTN", sortVar)
+              <th class="colhdr$(sortVar)"><a href="$(homeURL)$(cGIPath)$(d2wName)/ORDERBY$(orderByVar)&amp;sequence=Workstation" title="Sequence By Workstation">Workstation</a></th>
+
+              @OrderBy_Sort("GMWKSDSC2", sortVar)
+              <th class="colhdr$(sortVar)"><a href="$(homeURL)$(cGIPath)$(d2wName)/ORDERBY$(orderByVar)&amp;sequence=WorkstationDescr" title="Sequence By Workstation Description">Workstation<br>Description</a></th>
+
+              @OrderBy_Sort("GMWH", sortVar)
+              <th class="colhdr$(sortVar)"><a href="$(homeURL)$(cGIPath)$(d2wName)/ORDERBY$(orderByVar)&amp;sequence=Warehouse" title="Sequence By Warehouse Number">Warehouse<br>Number</a></th>
+
+              @OrderBy_Sort("GMPCTCMP", sortVar)
+              <th class="colhdr$(sortVar)"><a href="$(homeURL)$(cGIPath)$(d2wName)/ORDERBY$(orderByVar)&amp;sequence=PercentComplete" title="Sequence By Percent Complete">Percent<br>Complete</a></th>
+                        
+               @OrderBy_Sort("DC_CYYMMDD", sortVar)
+              <th class="colhdr$(sortVar)"><a href="$(homeURL)$(cGIPath)$(d2wName)/ORDERBY$(orderByVar)&amp;sequence=EndDate" title="Sequence By Completion Date">Completion<br>Date</a></th>
+
+              @OrderBy_Sort("GMORDTOT", sortVar)
+              <th class="colhdr$(sortVar)"><a href="$(homeURL)$(cGIPath)$(d2wName)/ORDERBY$(orderByVar)&amp;sequence=OrderTotal" title="Sequence By Order Total">Order<br>Total</a></th>
+
+              @OrderBy_Sort("GMMINWK", sortVar)
+              <th class="colhdr$(sortVar)"><a href="$(homeURL)$(cGIPath)$(d2wName)/ORDERBY$(orderByVar)&amp;sequence=MinWorked" title="Sequence By Minutes Worked">Minutes<br>Worked</a></th>
+              
+
+          </tr>
+          %INCLUDE "NoRecordsFound.icl"
+  		
+          %ROW{
+              %INCLUDE "SetRowClass.icl"
+              
+              @Format_Date(V_DC_CYYMMDD, "D", F_DC_CYYMMDD)
+              @Format_Nbr($(V_GMORDTOT), F_GMORDTOT, "2", $(amtEditCode), "", "", "")
+              
+              
+              
+
+              
+		
+              <tr class="$(rowClass)">
+                  <td class="colnmbr">$(V_GMORD#)</td>
+                  <td class="colnmbr">$(V_GMEMP#)</td> 
+                  <td class="colalph">$(V_GMWKSTN)</td>
+                  <td class="colalph">$(V_GMWKSDSC2)</td>
+                  <td class="colnmbr">$(V_GMWH)</td>
+                  <td class="colnmbr">$(V_GMPCTCMP)</td>
+                  <td class="coldate">$(F_DC_CYYMMDD)</td>
+              
+                  <td class="colnmbr">$(F_GMORDTOT)</td>
+                  <td class="colnmbr">$(V_GMMINWK)</td>
+          
+	       </tr>
+
+
+          %}
+      </table>
+      %INCLUDE "PageBottom.icl"
+      %INCLUDE "WildCardPrint.icl"
+      $(hrTagAttr)
+      %INCLUDE "Copyright.icl"
+  %}
+%}
+
+%HTML(ENTRY) {
+  %INCLUDE "SetLibraryList.icl"
+  %INCLUDE "WebReg.icl"
+  %if (formatToPrint != "")
+      @DTW_ASSIGN(RPT_MAX_ROWS, prtMaxRows)
+  %else
+      %if (orderBy == "")
+          @DTW_ASSIGN(orderBy, "GMORD#")
+          @DTW_ASSIGN(orderByDisplay, "Order Number")
+          @Save_WebReg_OrderBy(webRegCurFile, profileHandle, d2wName, orderBy, orderByDisplay)
+      %endif
+      @DTW_ASSIGN(RPT_MAX_ROWS, dspMaxRows)
+  %endif
+  %INCLUDE "SearchReturn.icl"
+%}
+
+%HTML(REPORT) {
+  %INCLUDE "SetLibraryList.icl"
+  %INCLUDE "WebReg.icl"
+  %if (formatToPrint != "")
+      @DTW_ASSIGN(RPT_MAX_ROWS, prtMaxRows)
+  %else
+      %if (orderBy == "")
+          @DTW_ASSIGN(orderBy, "GMORD#")
+          @DTW_ASSIGN(orderByDisplay, "Order Number")
+          @Save_WebReg_OrderBy(webRegCurFile, profileHandle, d2wName, orderBy, orderByDisplay)
+      %endif
+      @DTW_ASSIGN(RPT_MAX_ROWS, dspMaxRows)
+  %endif
+  %INCLUDE "SearchReturn.icl"
+%}
+%HTML(INPUT) {	
+  %INCLUDE "SetLibraryList.icl"
+  @Retrieve_WebReg(webRegCurFile, profileHandle, d2wName, wildCardSearch, orderBy, orderByDisplay, wildCardDisplay)
+  @DTW_ASSIGN(RPT_MAX_ROWS, dspMaxRows)
+  @Set_SQL(stmtSQL)
+%}
+
+%HTML(ORDERBY) {
+  %INCLUDE "SetLibraryList.icl"
+
+ 
+  %if (sequence == "OrderNumber")
+      %if (orderBy == "GMORD#")
+          @DTW_ASSIGN(orderBy, "GMORD# DESC")
+          @DTW_ASSIGN(orderByDisplay, "Order Number (descending)")
+      %else
+          @DTW_ASSIGN(orderBy, "GMORD#")
+          @DTW_ASSIGN(orderByDisplay, "Order Number")
+      %endif
+
+  %elseif (sequence == "EmpNumber")
+      %if (orderBy == "GMEMP#,GMORD#")
+          @DTW_ASSIGN(orderBy, "GMEMP# DESC,GMORD#")
+          @DTW_ASSIGN(orderByDisplay, "Employee Number (descending), Order Number")
+      %else
+          @DTW_ASSIGN(orderBy, "GMEMP#,GMORD#")
+          @DTW_ASSIGN(orderByDisplay, "Employee Number, Order Number")
+      %endif
+  
+
+  %elseif (sequence == "Workstation")
+      %if (orderBy == "GMWKSTN,GMORD#")
+          @DTW_ASSIGN(orderBy, "GMWKSTN DESC,GMORD#")
+          @DTW_ASSIGN(orderByDisplay, "Workstation (descending), Order Number")
+      %else
+          @DTW_ASSIGN(orderBy, "GMWKSTN,GMORD#")
+          @DTW_ASSIGN(orderByDisplay, "Workstation, Order Number")
+      %endif
+
+  %elseif (sequence == "WorkstationDescr")
+      %if (orderBy == "GMWKSDSC2,GMORD#")
+          @DTW_ASSIGN(orderBy, "GMWKSDSC2 DESC,GMORD#")
+          @DTW_ASSIGN(orderByDisplay, "Workstation Desc (descending), Order Number")
+      %else
+          @DTW_ASSIGN(orderBy, "GMWKSDSC2,GMORD#")
+          @DTW_ASSIGN(orderByDisplay, "Workstation Desc, Order Number")
+      %endif
+    
+  %elseif (sequence == "Warehouse")
+      %if (orderBy == "GMWH,GMWKSTN")
+          @DTW_ASSIGN(orderBy, "GMWH DESC,GMWKSTN")
+          @DTW_ASSIGN(orderByDisplay, "Warehouse (descending), Workstation")
+      %else
+          @DTW_ASSIGN(orderBy, "GMWH,GMWKSTN")
+          @DTW_ASSIGN(orderByDisplay, "Warehouse, Workstation")
+      %endif
+
+  %elseif (sequence == "PercentComplete")
+      %if (orderBy == "GMPCTCMP,GMORD#")
+          @DTW_ASSIGN(orderBy, "GMPCTCMP DESC,GMORD#")
+          @DTW_ASSIGN(orderByDisplay, "Percent Complete (descending), Order Number")
+      %else
+          @DTW_ASSIGN(orderBy, "GMPCTCMP,GMORD#")
+          @DTW_ASSIGN(orderByDisplay, "Percent Complete, Order Number")
+      %endif
+  
+  %elseif (sequence == "EndDate")
+      %if (orderBy == "DC_CYYMMDD,GMORD#")
+          @DTW_ASSIGN(orderBy, "DC_CYYMMDD DESC,GMORD#")
+          @DTW_ASSIGN(orderByDisplay, "End Date (descending), Order Number")
+      %else
+          @DTW_ASSIGN(orderBy, "DC_CYYMMDD,GMORD#")
+          @DTW_ASSIGN(orderByDisplay, "End Date, Order Number")
+      %endif
+
+  %elseif (sequence == "OrderTotal")
+      %if (orderBy == "GMORDTOT,GMORD#")
+          @DTW_ASSIGN(orderBy, "GMORDTOT DESC,GMORD#")
+          @DTW_ASSIGN(orderByDisplay, "Order Total (descending), Order Number")
+      %else
+          @DTW_ASSIGN(orderBy, "GMORDTOT,GMORD#")
+          @DTW_ASSIGN(orderByDisplay, "Order Total, Order Number")
+      %endif
+
+  %elseif (sequence == "MinWorked")
+      %if (orderBy == "GMMINWK,GMORD#")
+          @DTW_ASSIGN(orderBy, "GMMINWK DESC,GMORD#")
+          @DTW_ASSIGN(orderByDisplay, "Minutes Worked (descending), Order Number")
+      %else
+          @DTW_ASSIGN(orderBy, "GMMINWK,GMORD#")
+          @DTW_ASSIGN(orderByDisplay, "Minutes Worked, Order Number")
+      %endif
+  %endif
+
+  @DTW_ASSIGN(RPT_MAX_ROWS, dspMaxRows)
+  @Save_WebReg_OrderBy(webRegCurFile, profileHandle, d2wName, orderBy, orderByDisplay)
+  @Set_SQL(stmtSQL)
+%}
+
+%HTML(MASTERSEARCH) {
+  %INCLUDE "SetLibraryList.icl"
+  %if (defaultSearch == "Y")
+      @DTW_ASSIGN(defaultSearch, "")
+      @Retrieve_WebReg(webRegCurFile, profileHandle, d2wName, wildCardSearch, orderBy, orderByDisplay, wildCardDisplay)
+  %endif
+  %INCLUDE "$(docType)"
+  <html>
+      <head>
+          @dtw_assign(formName, "Search")
+          %INCLUDE "$(headInclude)"
+          <script TYPE="text/javascript">
+	       %INCLUDE "NumEdit.icl"
+              %INCLUDE "dateedit.icl"
+              %INCLUDE "calendar.icl"
+              %INCLUDE "CheckEnterSearch.icl"
+              function validate(searchForm) {
+                  if (editNum(document.Search.srchOrder, 7, 0) &&
+                      editdate(document.Search.srchEndDate))
+                      return true;
+              }
+          </script>
+          %INCLUDE "$(genericHead)"
+      </head>
+      <body $(bodyTagAttr) onKeyPress="checkEnterSearch()">
+          <!-- Start Of Banner Code -->
+          %INCLUDE "banner.icl"
+          <!-- End Of Banner Code -->
+          <table $(baseTable)>
+              <tr valign="top">
+                  @dtw_assign(pageID, "CUSTOMERSEARCH")
+                  <td class="menu">@Menu_Query(profileHandle, dataBaseID, portal, pageID)</td>
+                  <td class="content">
+                      %INCLUDE "SearchPageTitle.icl"
+                      $(hrTagAttr)
+
+                      @dtw_assign(wildCardResetURL, "$(homeURL)$(cGIPath)$(d2wName)/WILDCARD$(d2wVarBase)$(orderByVarBase)&amp;wildCardSearch=&amp;updateSearch=Y")
+                      %INCLUDE "WildCardReset.icl"
+
+                      <form class="formClass" METHOD=POST NAME="Search" onSubmit="return validate(document.Search)" action="$(homeURL)$(cGIPath)$(d2wName)/WILDCARD$(d2wVarBase)$(orderByVarBase)$(wildCardVarBase)">
+                          %INCLUDE "SearchTop.icl"
+
+                          <tr><td class="dsphdr">Order Number</td>
+                              @dtw_assign(operNbr, "operOrder")
+                              <td>%INCLUDE "opersel_num_short.icl"</td>
+                              <td class="inputnmbr"><input type="text" name="srchOrder" size="8" maxlength="8"></td>
+                          </tr>
+                          
+
+  
+%{ MLH 100207 %}
+                          <tr><td class="dsphdr">Employee Number</td>
+                              @dtw_assign(operNbr, "operEmp")
+                              <td>%INCLUDE "opersel_num_short.icl"</td>
+                              <td class="inputnmbr"><input type="text" name="srchEmp" size="5" maxlength="5"></td>
+                          </tr>
+%{ MLH 100207 %}
+
+
+
+                          <tr><td class="dsphdr">Workstation</td>
+                              @dtw_assign(operNbr, "operwk")
+                              <td>%INCLUDE "opersel_alph_short.icl"</td>
+                              <td class="inputalph"><input type="text" name="srchwk" size="2" maxlength="2"></td>
+                          </tr>
+
+                          <tr><td class="dsphdr">Workstation Description</td>
+                              @dtw_assign(operNbr, "operwkdsc")
+                              <td>%INCLUDE "opersel_alph_short.icl"</td>
+                              <td class="inputalph"><input type="text" name="srchwkdsc" size="12" maxlength="12"></td>
+                          </tr>
+
+                          <tr><td class="dsphdr">End Date</td>
+                              @dtw_assign(operNbr, "operEndDate")
+                              <td>%INCLUDE "opersel_num_short.icl"</td>
+                              <td class="inputnmbr"><input name="srchEndDate" type="text" size="6" maxlength="6">
+                                  <a href="javascript:calWindow('srchEndDate');">$(calendarImage)</a></td>
+                          </tr>
+
+                          <tr><td class="dsphdr">Minutes Worked</td>
+                              @dtw_assign(operNbr, "operMinWorked")
+                              <td>%INCLUDE "opersel_num_short.icl"</td>
+                              <td class="inputnmbr"><input name="srchMinWorked" type="text" size="6" maxlength="6">
+                                  <a href="javascript:calWindow('srchMinWorked');">$(calendarImage)</a></td>
+                          </tr>
+
+                          
+
+                         
+                		
+                          %INCLUDE "SearchBottom.icl"
+                          <script TYPE="text/javascript">
+                              document.Search.srchOrder.focus();
+                          </script>
+                      </form>
+                      $(hrTagAttr)
+                      %INCLUDE "Copyright.icl"
+                  </td>
+              </tr>
+          </table>
+          <!-- Start Of Trailer Code -->
+          %INCLUDE "trailer.icl"
+          <!-- End Of Trailer Code -->
+      </body>
+  </html>
+%}
+
+%HTML(WILDCARD) {
+  %INCLUDE "SetLibraryList.icl"
+  @dtw_assign(wildCardTemp, "")
+  @dtw_assign(wildDisplayTemp, "")
+		 
+  @Build_WildCard ("GMORD#", "Order Number", $(srchOrder), "", operOrder, "N")
+  @Build_WildCard ("GMEMP#", "Employee Number", $(srchEmp), "", operEmp, "N")
+  @Build_WildCard ("upper(GMWKSTN)", "Reference", $(srchwk), "U", operwk, "A")
+  @Build_WildCard ("DC_CYYMMDD", "End Date", $(srchEndDate), "", operEndDate, "D")
+  
+
+  @dtw_assign(masterSearchVar, "$(homeURL)$(cGIPath)$(d2wName)/MASTERSEARCH$(d2wVarBase)")
+  %INCLUDE "WildCardUpdate.icl"
+%}

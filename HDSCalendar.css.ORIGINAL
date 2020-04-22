@@ -1,0 +1,195 @@
+/* default cascading style sheet used for HarrisData EIP Event Calendar  */
+
+.calheadertable {
+  width : 100%;
+  margin: 0em 0em 0em 0em;
+}
+
+.calselmth {
+  font-size: 12pt;
+  font-weight: bold;
+  color : red;
+  text-align : left;
+  vertical-align: left;
+  padding-right: 15px;
+}
+
+.calsearch {
+  font-size: 12pt;
+  font-weight: bold;
+  color : black;
+  text-align : right;
+  padding-left: 15px;
+  padding-right: 15px;
+}
+
+.calpastdue {
+  font-size: 12pt;
+  font-weight: bold;
+  color : red;
+  text-align : right;
+}
+
+.calmonthtable {
+    width : 100%;
+    margin: 0em 0em 0em 0em;
+    padding: 0;
+    border-top : 1px solid #0066CC;
+    border-left : 1px solid #0066CC;
+}
+
+.mthselweek {
+  width : 10;
+  vertical-align : middle;
+  text-align : center;
+  border-right: 1px solid #0066CC;
+  border-bottom : 1px solid #0066CC;
+}
+
+.caldaytable {
+  width : 100%;
+}
+
+.caltrailertable {
+  width : 100%;
+  margin: 0em 0em 0em 0em;
+}
+
+.calweektable {
+  width : 100%;
+  margin: 0em 0em 0em 0em;
+  border : none;
+}
+
+.calweekeventtable {
+  width : 100%;
+  margin: 0em 0em 0em 0em;
+}
+
+.calmthday, .calmthtoday, .calothday, {
+	width : 10em;
+	height : 6em;
+	vertical-align : top;
+	border-right: 1px solid #0066CC;
+	border-bottom: 1px solid #0066CC;
+	padding : 0.5ex 0.5ex 0.5ex 0.5ex;
+}
+
+.calmthday, .calmthday a:link, .calmthday a:visited,
+.calmthtoday, .calmthtoday a:link, .calmthtoday a:visited,
+.calothday, .calothday a:link, .calothday a:visited {
+  font-size: 8pt;
+}
+
+.calmthtoday {
+    background-color : #E0FFFF;
+}
+
+.calmthday {
+    background-color : #FFFFE0;
+}
+
+.calothday {
+  background-color : transparent;
+}
+
+.caldayhdr {
+  font-size: 8pt;
+  font-weight: bold;
+  color : white;
+  text-align : center;
+  vertical-align: center;
+  background-color : #0066CC;
+}
+
+.calweekhdr {
+    font-size: x-small;
+    font-weight: bold;
+    color : Yellow;
+    text-align : right;
+    vertical-align: center;
+    background-color : #0066CC;
+    padding-bottom : 0em;
+    padding-top : 0em;
+    margin-bottom : 1ex;
+    border : 1px solid white;
+}
+
+.calweekhdr a:link, .calweekhdr a:visited {
+    font-size: x-small;
+    font-weight: bold;
+    color : Yellow;
+    text-align : right;
+    vertical-align: center;
+    background-color : #0066CC;
+    padding-bottom : 0em;
+    padding-top : 0em;
+}
+
+.calweekhdr a:hover {
+    color : White;
+}
+
+.calmoremsg, .calmoremsg a:link, .calmoremsg a:visited {
+  font-size:  8pt;
+  color : black;
+  text-align : right;
+  white-space : nowrap;
+}
+
+.calyeartable {
+  margin: 0em 0em 0em 0em;
+  border-top : 1px solid #0066CC;
+  border-left : 1px solid #0066CC;
+  border-bottom : none;
+  border-right : none;
+}
+
+.yrselweek, .yrselweek a:link, .yrselweek a:visited {
+    font-size: 8pt;
+    width : 4em;
+    vertical-align : middle;
+    white-space : normal;
+    text-align : center;
+    background-color : #EFEFEF;
+    color : black;
+    border-bottom : 1px solid #0066CC;
+    border-right : 1px solid #0066CC;
+    border-top : none;
+    border-left : none;
+}
+
+.yrselweek a:link, .yrselweek a:visited {
+  color : red;
+  border : none;
+}
+
+.yrselweek a:hover {
+  color : #0066CC;
+}
+
+.calyearday {
+    width : 15em;
+    vertical-align : top;
+    font-size : xx-small;
+    padding : 0ex 1ex 0ex 1ex;
+    border-bottom : 1px solid #0066CC;
+    border-right : 1px solid #0066CC;
+    border-top : none;
+    border-left : none;
+    background-color : #FFFFE0;
+}
+
+.calyearday a {
+    white-space: nowrap;
+    font-size : xx-small;
+}
+
+.legendtitle {
+  font-size: 10pt;
+  font-weight: bold;
+  color : Black;
+  text-align : center;
+  vertical-align: center;
+  background-color : transparent;
+}

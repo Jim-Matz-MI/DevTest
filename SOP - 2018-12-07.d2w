@@ -1,0 +1,886 @@
+%{
+*********************************************************************
+* Copr 1979 2003 An Unpublished Work By Harris Business Group, Inc. *
+* All rights reserved. This work contains trade secrets.            *
+*                  					             *
+*  Job: Select Order Print                                          *
+*                                                                   *
+* ================================================================= *
+* Modifications                                                     *
+* ================================================================= *
+* MLH  MonaH    2012-12-11 - Replaced OrderEntryNameAddress.icl     *
+*                            with OrderEntryNameAddress2.icl in     *
+*                            custom library to include the customer *
+*                            number with address.                   *
+* MD01 MichaelD 2017-04-03 - Added dynamic sales order select pull- *
+*                            down to allow users to display orders  *
+*                            other than the one originally selected *
+*                            from the green screen. (Allows users   *
+*                            to use this screen/view open while not *
+*                            freezing one of their green screen     *
+*                            sessions.)                             *
+* MD02 MichaelD 2017-04-06 - Add warehouse to header section.       *
+* MD03 MichaelD 2017-08-31 - Replace Required Date with Projected   *
+*                            Date.                                  *
+* MD04 MichaelD 2018-01-10 - Users requested that search number be  *
+*                            highlighted, or otherwise ready to     *
+*                            receive to immediate input when coming *
+*                            to screen initially so user doesn't    *
+*                            have to use <Ctrl>+A to select the     *
+*                            initial value and replace it. (Note    *
+*                            that base search logic will fail with  *
+*                            no response if search default passed   *
+*                            in query string is blank.) Since       *
+*                            initial default number in passed as    *
+*                            9999999 when user has not pre-selected *
+*                            an order number, modify page to select *
+*                            all text in the search input text box  *
+*                            if its value is 9999999. This enables  * 
+*                            user to immediately paste or type over *
+*                            the 9999999 initial value without      *
+*                            using further keystrokes.              *
+* MD05 MichaelD 2018-01-11 - Add line item sequence number to line  *
+*                            item detail section.                   *
+* MD06 MichaelD 2018-05-07 - Add Contact Name to header per request *
+*                            from Brianna P in Layouts. This        *
+*                            contact name is from the latest TOPS   *
+*                            AS scan, also copied to OnBase, and is *
+*                            stored in the order header field       *
+*                            OEORHD/OEUDF1. (This is also the same  *
+*                            Contact Name used on the Art Follow-Up *
+*                            reports.                               *
+* MD07 MichaelD 2018-05-08 - Add TOPS Phone Number via call to new  *
+*                            program GOERTP_W which selects the     *
+*                            TOPS Phone Number from the most recent *
+*                            AS scan for the requested sales order  *
+*                            number.                          	    *
+* MD08 MichaelD 2018-05-09 - Add ACK email address via call to new  *
+*                            program GOERAE_W which selects the     *
+*                            email address from the first ACK       *
+*                            OEEFRC record for the requested sales  *
+*                            order number. Also add Job Name and    *
+*                            date/time of most recent order modifi- *
+*                            cation.                                *
+* MD09 MichaelD 2018-05-10 - Add link to TOPS page.                 *
+* MD10 MichaelD 2018-05-18 - IT-1815 Add hold code to order header. *
+*                                                                   *
+*********************************************************************
+%}
+
+%INCLUDE "BaseConfigurationGI.icl"
+%INCLUDE "EditRoutines.icl"
+%INCLUDE "ErrorNoWarning.icl"
+%INCLUDE "GenericDirectCallVariables.icl"
+%INCLUDE "Menu.icl"
+%INCLUDE "NumFormat.icl"
+%INCLUDE "OrderEntry.icl"
+%INCLUDE "VarBase.icl"
+
+%Define {
+  page_title              = "$(orderTypeDesc) &nbsp; [$(orderNumber)]"
+%{
+* MD01 Begin: Add order number select pull-down.
+  d2wName                 = "SelectOrderPrint.d2w"
+* MD01 End: Add order number select pull-down.
+%}
+  d2wName                 = "SOP.d2w"
+  d2wVarBase              = "$(genericVarBase)&amp;orderNumber=@dtw_rurlescseq(orderNumber)"
+  DATABASE                = "*LOCAL"
+  DTW_DEFAULT_REPORT      = "NO"
+  DTW_HTML_TABLE          = "YES"
+  DTW_PAD_PGM_PARMS       = "YES"
+  headerTable             = %table
+  detailTable             = %table
+  commentTable            = %table
+  optionTable             = %table
+  rows        	           = ""
+  custType  	           = "B"
+  orderTypeDesc  	   = ""
+  orderDesc  	           = ""
+  formatToPrint           = "Y"
+  orderControlNumber      = "00000000"
+  type                    = "O"
+  orderDocType            = "WEB"
+  orderSequence           = "000"
+  releaseNumber           = "000"
+%}
+
+%MACRO_FUNCTION Set_SQL (INOUT stmtSQL) {
+  %INCLUDE "$(docType)"	
+  <html>
+      <head>
+          %INCLUDE "$(headInclude)"
+%{
+* MD01 Begin: Add order number select pull-down.
+%}
+          <script TYPE="text/javascript">
+	        %INCLUDE "CheckReqField.icl"
+	        %INCLUDE "NumEdit.icl"
+            %INCLUDE "CheckEnterSearch.icl"
+            function validate(searchForm) {
+              if (checkReqField(document.Search.srchNumber)) {
+                if (editNum(document.Search.srchNumber, 7, 0)) {
+                  document.Search.action = document.Search.action + document.Search.srchNumber.value;
+                  return true;
+                }
+              }
+            }
+          </script>
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+.collapsible {
+  background-color: #777;
+  color: white;
+  cursor: pointer;
+  padding: 18px;
+  width: 100%;
+  border: none;
+  text-align: left;
+  outline: none;
+  font-size: 15px;
+}
+
+.active, .collapsible:hover {
+  background-color: #555;
+}
+
+.content {
+  padding: 0 18px;
+  display: none;
+  overflow: hidden;
+  background-color: #f1f1f1;
+}
+</style>
+
+%{                  
+* MD01 End: Add order number select pull-down.
+%}
+          %INCLUDE "$(genericHead)"
+      </head>
+      <body $(bodyTagAttr)>
+          <!-- Start Of Banner Code -->
+          %INCLUDE "banner.icl"
+          <!-- End Of Banner Code -->
+              <table $(baseTable)>
+              
+%{
+* MD01 Begin: Add order number select pull-down.
+%}
+                  <tr>
+                    <td class="content" style="text-align: right;">
+                      <form class="formClass" style="display: inline-block;" METHOD=POST NAME="Search" onSubmit="return validate(document.Search)" ACTION="$(homeURL)$(cGIPath)$(d2wName)/REPORT?baseVar=2Eicl&amp;orderNumber=">
+                        <table $(quickSearchTable)>
+                          <tr>
+                            <th class="colhdr">Order Number</th>
+                            <th>&nbsp;</th>
+                          </tr>
+                          <tr><td><input type="text" class="inputnmbr" name="srchNumber" size="10" maxlength="7" value="$(orderNumber)">
+                              <input type="hidden" name="operOrder" value="=">
+                            </td>
+                            <td><a href="javascript:check(document.Search)">$(goSearchImage)</a></td>
+                          </tr>
+                        </table>
+                  <script TYPE="text/javascript">
+                    document.Search.srchNumber.focus();
+%{
+* MD04 Begin: Select search text when search is for default 9999999.
+%}
+                    if ( document.Search.srchNumber.value == "9999999" ) {
+                      document.Search.srchNumber.select();
+                    }
+%{
+* MD04 End: Select search text when search is for default 9999999.
+%}
+                  </script>
+                      </form>
+                    </td>
+                  </tr>
+%{                  
+* MD01 End: Add order number select pull-down.
+%}
+              
+                  <tr valign="top">
+                      <td class="content">
+                          %INCLUDE "stmtSQLClear.icl"
+                          @dtw_concat(stmtSQL, " Select OEORHD.*, OEORDT.* ", stmtSQL)
+                          @dtw_concat(fileSQL, " OEORHD inner join OEORDT on OEORD#=ODORD# ", fileSQL)
+                          @dtw_concat(selectSQL, "OEORD#=$(orderNumber) and ODBLN#=0 ", selectSQL)
+                          %INCLUDE "stmtSQLSelect.icl"
+                          @dtw_concat(stmtSQL, " Order By ODORD#,ODORL#,ODBLN#", stmtSQL)
+                          %INCLUDE "stmtSQLEnd.icl"
+                          @Select_Order_Print(profileHandle, dataBaseID, stmtSQL)
+                      </td>
+                  </tr>
+              </table>
+          <!-- Start Of Trailer Code -->
+          %INCLUDE "trailer.icl"
+          <!-- End Of Trailer Code -->
+      </body>
+  </html>
+%}
+
+%{  MD07 Begin: Add TOPS phone number. %}
+%FUNCTION(dtw_directcall) RetTopsPhoneNumber(INOUT CHAR(64)     profileHandle,
+			                    CHAR(2)      dataBaseID,
+                                DECIMAL(8,0) inOrderNumber,
+			                    DECIMAL(11,0) outPhoneNumber)
+{ %EXEC {GOERTP_W.PGM %}
+%}
+%{  MD07 End: Add TOPS phone number. %}
+
+%{ MD08 Begin: Add ACK email, job name, and modified date/time. %}
+%FUNCTION(dtw_directcall) RetAckEmailAddress(INOUT CHAR(64)     profileHandle,
+			                    CHAR(2)      dataBaseID,
+                                DECIMAL(8,0) inOrderNumber,
+			                    CHAR(256)    outEmailAddress)
+{ %EXEC {GOERAE_W.PGM %}
+%}
+%{ * MD08 End: Add ACK email, job name, and modified date/time. %}
+
+%FUNCTION(dtw_sql) Select_Order_Print (IN CHAR(64)    profileHandle,
+				           CHAR(2)     dataBaseID,
+                                          CHAR(32000) stmtSQL)
+{CALL $(pgmLibrary)HSYSQL_W
+
+  %REPORT{
+      @dtw_assign(firstRecord, "Y")
+
+      %ROW {
+          %if (firstRecord == "Y")
+              @dtw_assign(firstRecord, "N")
+              %INCLUDE "OrderEntryRetInfo.icl"
+              %INCLUDE "PageTitle.icl"
+              $(hrTagAttr)
+              %INCLUDE "OrderEntryNameAddress2.icl"
+
+              <table $(contentTable)>
+    	       <colgroup>
+                  <tr><th class="colhdr">Terms</th>
+                      %if (H1CONT > "0")
+                          <th class="colhdr">Contact</th>
+                      %endif
+                      <th class="colhdr">Salesman</th>
+                      <th class="colhdr">Ordered</th>
+%{  MD03 Begin: Replace Required Date with Projected Date.  %}
+%{  Replaced:         <th class="colhdr">Required</th>  %}
+                      <th class="colhdr">Projected</th>
+%{  MD03 End  : Replace Required Date with Projected Date.  %}
+                      <th class="colhdr">Reference Number</th>
+%{
+* MD02 Begin: Add warehouse to header.
+%}
+                      <th class="colhdr">Warehouse</th>
+%{
+* MD02 End: Add warehouse to header.
+%}
+                      <th class="colhdr">Ship Via</th>
+                  </tr>
+
+                  @RtvFldDesc("TMCTRM='$(V_OECTRM)'", "HDTRMS", "TMCTDS", termsDescription)
+                  @RtvFldDesc("SMSLSM=$(V_OESLSM)", "HDSLSM", "SMSNA1", salesmanName)
+                  @Format_Date(V_OERQDT, "D", F_OERQDT)
+%{  MD03 Begin: Replace Required Date with Projected Date.  %}
+                  @dtw_assign(OEUDN4, V_OEUDN4)  
+                  @Format_Nbr($(V_OEUDN4), F_OEUDN4, "0", $(prjEditCode), "", "" ,"")
+                  @Format_Date(F_OEUDN4, "D", F_OEUDN4A)
+%{  MD03 End  : Replace Required Date with Projected Date.  %}
+                  @Format_Date(V_OEBDTE, "D", F_OEBDTE)
+                  
+%{
+* MD02 Begin: Add warehouse to header.
+%}
+                  @dtw_assign(udf0, "")
+                  @dtw_assign(udf0, $(V_OEUDF0))
+                  @dtw_strip(udf0, udf0)
+                  @dtw_assign(warehouse, "")
+                  %if (@dtw_rlength(udf0) >= "7")
+                    @dtw_assign(warehouse, "@dtw_rsubstr(udf0, "5", "3")")
+                  %else
+                    @dtw_assign(warehouse, "tbd")
+                  %endif
+%{
+* MD02 End: Add warehouse to header.
+%}
+%{
+* MD07 Begin: Add TOPS phone number.
+%}
+  @dtw_assign(inOrderNumber, orderNumber)
+  @dtw_assign(outPhoneNumber, "0")
+  @dtw_assign(fmtPhoneNumber, "")
+  @dtw_assign(fmtPhoneNumber1, "")
+  @dtw_assign(fmtPhoneNumber2, "")
+  @dtw_assign(fmtPhoneNumber3, "")
+  @RetTopsPhoneNumber(profileHandle, dataBaseID, inOrderNumber, outPhoneNumber)
+  %if (outPhoneNumber > "0")
+    @dtw_assign(fmtPhoneNumber1, "@dtw_rsubstr(outPhoneNumber, "1", "3")")
+    @dtw_assign(fmtPhoneNumber2, "@dtw_rsubstr(outPhoneNumber, "4", "3")")
+    @dtw_assign(fmtPhoneNumber3, "@dtw_rsubstr(outPhoneNumber, "7", "4")")
+    @dtw_assign(fmtPhoneNumber, "@dtw_rconcat(fmtPhoneNumber, fmtPhoneNumber1)")
+    @dtw_assign(fmtPhoneNumber, "@dtw_rconcat(fmtPhoneNumber, "-")")
+    @dtw_assign(fmtPhoneNumber, "@dtw_rconcat(fmtPhoneNumber, fmtPhoneNumber2)")
+    @dtw_assign(fmtPhoneNumber, "@dtw_rconcat(fmtPhoneNumber, "-")")
+    @dtw_assign(fmtPhoneNumber, "@dtw_rconcat(fmtPhoneNumber, fmtPhoneNumber3)")
+  %endif
+%{
+* MD07 End: Add TOPS phone number.
+%}
+
+%{ MD08 Begin: Add ACK email, job name, and modified date/time. %}
+  @dtw_assign(inOrderNumber, orderNumber)
+  @dtw_assign(outEmailAddress, "")
+  @RetAckEmailAddress(profileHandle, dataBaseID, inOrderNumber, outEmailAddress)
+%{ MD08 End: Add ACK email, job name, and modified date/time. %}
+
+                  <tr class="oddrow">
+                      <td class="colalph">$(termsDescription)</td>
+                      %if (H1CONT > "0")
+                          <td class="colalph">$(contactName)</td>
+                      %endif
+                      <td class="colalph">$(salesmanName)</td>
+                      <td class="coldate">$(F_OEBDTE)</td>
+%{  MD03 Begin: Replace Required Date with Projected Date.  %}
+%{  Replaced:         <td class="coldate">$(F_OERQDT)</td>  %}
+                      <td class="coldate">$(F_OEUDN4A)</td>
+%{  MD03 End  : Replace Required Date with Projected Date.  %}
+                      <td class="colalph">$(V_OEORRF)</td>
+%{
+* MD02 Begin: Add warehouse to header.
+%}
+                      <td class="colcode">$(warehouse)</td>
+%{
+* MD02 End: Add warehouse to header.
+%}
+                      <td class="colalph">$(V_OESVDS)</td>
+                  </tr>
+              </table>
+
+%{
+* MD06 Begin: Add TOPS contact name to header.
+* MD07 Begin: Add TOPS phone number.
+* MD08 Begin: Add ACK email, job name, and modified date/time.
+* MD09 Begin: Add link to TOPS page.
+* MD10 Begin: Add hold code.
+%}
+              <table $(contentTable)>
+    	       <colgroup>
+                  <tr>
+                      <th class="colhdr">TOPS Contact Name</th>
+                      <th class="colhdr">ACK Email Address</th>
+                      <th class="colhdr">TOPS Phone Number</th>
+                      <th class="colhdr">Job Name</th>
+                      <th class="colhdr">Hold Code</th>
+                      <th class="colhdr">TOPS Link</th>
+                  </tr>
+                  <tr class="oddrow">
+                      <td class="colalph">$(V_OEUDF1)&nbsp;</td>
+                      <td class="colalph">$(outEmailAddress)&nbsp;</td>
+                      <td class="colalph">$(fmtPhoneNumber)&nbsp;</td>
+                      <td class="colalph">$(V_OEUDF2)&nbsp;</td>
+                      <td class="colalph">$(V_OEHOLD)&nbsp;</td>
+                      <td class="colalph"><a href="$(homeURL)$(cGIPath)GeminiOrderTracking.d2w/ENTRY?baseVar=BaseConfigurationGI%2Eicl&portal=GEMINI%20ORDER%20TRACKIN&amp;initialOrderNumber=@dtw_rurlescseq(orderNumber)" title="TOPS">$(orderNumber)</a></td>
+                  </tr>
+              </table>
+%{
+* MD10 End: Add hold code.
+* MD09 End: Add link to TOPS page.
+* MD08 End: Add ACK email, job name, and modified date/time.
+* MD07 End: Add TOPS phone number.
+* MD06 End: Add TOPS contact name to header.
+%}
+              @DTW_ASSIGN(maintCode, $(V_OEMNCD))
+              @DTW_ASSIGN(subTotal, "0")
+              @DTW_ASSIGN(stateTax, $(V_OETSTX))
+              @DTW_ASSIGN(countyTax, $(V_OETCTX))
+              @DTW_ASSIGN(cityTax, $(V_OETYTX))
+              @DTW_ASSIGN(local1Tax, $(V_OETLC1))
+              @DTW_ASSIGN(local2Tax, $(V_OETLC2))
+              @DTW_ASSIGN(local3Tax, $(V_OETLC3))
+              @DTW_ASSIGN(freightChg, $(V_OETFRT))
+              @DTW_ASSIGN(specialChg, $(V_OETMSG))
+              @DTW_ASSIGN(orderTotal, $(V_OETIVA))
+              @DTW_ASSIGN(hdrShipTo, $(V_OESHTO))
+              @DTW_ASSIGN(hdrShipVia, $(V_OESVSV))
+              @DTW_ASSIGN(creditType, $(V_OECCTP))
+              @DTW_ASSIGN(creditAmt, $(V_OECCAM))
+              @DTW_ASSIGN(chargeAmt, $(V_OECHGA))
+
+              <table $(contentTable)>
+                  <tr>	
+%{  MD05 Begin: Add line item sequence number.  %}
+                      <th class="colhdr">Lin<br>Nbr</th>
+%{  MD05 End: Add line item sequence number.  %}
+                      %if (custItemFlag == "Y")
+                          <th class="colhdr">Customer <br> Item Number</th>
+                      %endif
+                      <th class="colhdr">Item <br> Number</th>
+                      <th class="colhdr">Description</th>
+                      %if (displaySynonyms == "Y")
+                          <th class="colhdr">Synonym</th>
+                      %endif
+%{  MD03 Begin: Replace Required Date with Projected Date.  %}
+%{  Replaced:         <th class="colhdr">Required<br>Date</th>  %}
+                      <th class="colhdr">&nbsp;</th>
+%{  MD03 End  : Replace Required Date with Projected Date.  %}
+                      %if (maintCode == "A")
+                          <th class="colhdr">Quantity<br>Ordered</th>
+                      %else
+                          <th class="colhdr">Quantity<br>Open</th>
+                      %endif
+                      <th class="colhdr">Price</th>
+                      <th class="colhdr">Extended <br> Price</th>
+                  </tr>
+                  @dtw_assign(lineNumber, "000")
+                  @Open_History_Comments(profileHandle, dataBaseID, orderNumber, orderSequence, lineNumber, releaseNumber, orderDocType, type, commentTable)
+                  @dtw_tb_rows(commentTable, rows)
+                  %if (rows > "0")
+                      @dtw_assign(x, "1")
+                      %while(x <= rows){@dtw_tb_getv(commentTable, x, "1", cmt)@dtw_add(x, "1", x)
+                          %INCLUDE "SetRowClass.icl"
+                          <tr class="$(rowClass)">
+                              %if (cmt != "")
+                                  <td colspan="2">&nbsp;</td><td class="colalph" colspan="6">$(cmt)</td>
+                              %else
+                                  <td colspan="2">&nbsp;</td><td class="colalph" colspan="6">&nbsp;</td>
+                              %endif
+                          </tr>
+                      %}
+                  %endif
+          %endif
+
+              @DTW_ASSIGN(itemDesc, V_ODIMDS)
+              @dtw_urlescseq(itemDesc, itemDesc)
+              @Format_Nbr("@dtw_rsubtract(V_ODQORD, V_ODQSTD)", qtyOpen, $(qtyNbrDec), $(qtyEditCode), "Y", "", "")
+              @Format_Nbr(V_ODSLPR, F_ODSLPR, $(prcNbrDec), $(amtEditCode), "Y", "", "")
+              @Format_Date(V_ODRQDT, "D", F_ODRQDT)
+
+              %if (V_ODOREC == "N")
+                  @dtw_assign(IMKIT, "")
+              %else
+                  @RtvFldDesc("IMITEM='$(V_ODITEM)'", "HDIMST", "IMKIT", IMKIT)
+              %endif
+
+              %if (V_ODBLN# == "0")
+                  @dtw_assign(workPrice, @dtw_rformat(@dtw_rdivide(@dtw_rmultiply(@dtw_rsubtract(V_ODQORD, V_ODQSTD), V_ODSLPR), V_ODORUF), "21", "2", "0", "", "23"))
+                  @Format_Nbr(workPrice, ExtendedPrice, "2", $(amtEditCode), "Y", "", "")
+                  @DTW_ADD(subTotal, workPrice, "15", subTotal)
+              %endif
+
+              %INCLUDE "SetRowClass.icl"
+              <tr class="$(rowClass)">
+%{  MD05 Begin: Add line item sequence number.  %}
+                  <td class="colnmbr">$(V_ODORL#)</td>
+%{  MD05 End: Add line item sequence number.  %}
+                  %if (custItemFlag == "Y")
+                      <td class="colalph">$(V_ODORCS)</td>
+                  %endif
+                  <td class="colalph">$(V_ODITEM)</td>
+                  <td class="colalph">$(V_ODIMDS)</td>
+                  %if (displaySynonyms == "Y")
+                       @RtvFldDesc("SYITEM='$(V_ODITEM)'", "HDSITM", "SYSYNM", synonym)
+                       <td class="colalph">$(synonym)</td>
+                  %endif
+%{  MD03 Begin: Replace Required Date with Projected Date.  %}
+%{  Replaced:     <td class="coldate">$(F_ODRQDT)</td>  %}
+                  <td class="coldate">&nbsp;</td>
+%{  MD03 End  : Replace Required Date with Projected Date.  %}
+                  <td class="colnmbr">$(qtyOpen)</td>
+                  <td class="colnmbr">$(F_ODSLPR)</td>
+                  <td class="colnmbr">$(ExtendedPrice)</td>
+	       </tr>
+
+                  %if (V_ODBLKT == "Y")
+                      @Blanket_Line_Query(profileHandle, dataBaseID, orderControlNumber, orderNumber, V_ODORL#, blanketLineTable)
+                      @dtw_tb_rows(blanketLineTable, rows)
+                      %if (rows > "0")
+                          @dtw_assign(x, "1")
+                          %while(x <= rows){
+                              @DTW_ASSIGN(V_ODRQDT, @dtw_tb_rgetv(blanketLineTable, x, @dtw_tb_rQuerycolnonj(blanketLineTable, "ODRQDT")))
+                              @DTW_ASSIGN(V_ODSHTO, @dtw_tb_rgetv(blanketLineTable, x, @dtw_tb_rQuerycolnonj(blanketLineTable, "ODSHTO")))
+                              @DTW_ASSIGN(V_ODSVSV, @dtw_tb_rgetv(blanketLineTable, x, @dtw_tb_rQuerycolnonj(blanketLineTable, "ODSVSV")))
+                              @DTW_ASSIGN(V_ODBQTY, @dtw_rsubtract(@dtw_tb_rgetv(blanketLineTable, x, @dtw_tb_rQuerycolnonj(blanketLineTable, "ODQORD")), @dtw_tb_rgetv(blanketLineTable, x, @dtw_tb_rQuerycolnonj(blanketLineTable, "ODQSTD"))))
+                              @Format_Nbr(V_ODBQTY, F_ODBQTY, $(qtyNbrDec), $(qtyEditCode), "Y", "", "")
+
+                              @Format_Date(V_ODRQDT, "D", F_ODRQDT)
+                              %if (@dtw_tb_rgetv(blanketLineTable, x, @dtw_tb_rQuerycolnonj(blanketLineTable, "ODORST")) == "O")
+                                  %INCLUDE "SetRowClass.icl"
+                                  <tr class="$(rowClass)">
+                                      <td>&nbsp;</td><td>&nbsp;</td>
+                                      %if (custItemFlag == "Y")
+	   	                           <td>&nbsp;</td>
+	   	                       %endif
+                                      %if (displaySynonyms == "Y")
+                                          <td>&nbsp;</td>
+                                      %endif
+                                      <td class="coldate">$(F_ODRQDT)</td>
+                                      <td class="colnmbr">$(F_ODBQTY)</td>
+                                      <td>&nbsp;</td><td>&nbsp;</td>
+                                  </tr>
+                                  %if (multShipTo == "Y")
+                                      %if (hdrShipTo != V_ODSHTO && V_ODSHTO != "0")
+                                          @RtvFldDesc("CMCUST=$(V_ODSHTO)", "HDCUST", "CMCNA1", fieldDesc)
+                                          %INCLUDE "SetRowClass.icl"
+                                          <tr class="$(rowClass)">
+%{  MD05 Begin: Add line item sequence number.  %}
+                                              <td class="colnmbr">&nbsp;</td>
+%{  MD05 End: Add line item sequence number.  %}
+                                              <td>&nbsp;</td>
+                                                  %if (custItemFlag == "Y")
+            	   	                           <td>&nbsp;</td>
+            	   	                       %endif
+                                              <td class="colalph">&nbsp; &nbsp; Ship-To: $(fieldDesc)</td>
+                                              <td colspan="7">&nbsp;</td>
+                                          </tr>
+                                      %endif
+               		       %endif
+                                  %if (multShipVia == "Y")
+                                      %if (hdrShipVia != V_ODSVSV && V_ODSVSV != "")
+                                          @RtvFldDesc("SVSVSV='$(V_ODSVSV)'", "HDSHPV", "SVSVDS", fieldDesc)
+                                          %INCLUDE "SetRowClass.icl"
+                                          <tr class="$(rowClass)">
+                                              <td>&nbsp;</td>
+                                                  %if (custItemFlag == "Y")
+            	   	                           <td>&nbsp;</td>
+            	   	                       %endif
+                                              <td class="colalph">&nbsp; &nbsp; Ship Via: $(fieldDesc)</td>
+                                              <td colspan="7">&nbsp;</td>
+                                          </tr>
+                                      %endif
+               		   %endif
+                              %endif
+                              @dtw_add(x, "1", x)
+                          %}
+                      %endif
+                  %endif
+                  %if (V_ODBLKT != "Y")
+                      %if (multShipTo == "Y")
+                          %if (hdrShipTo != V_ODSHTO && V_ODSHTO != "0")
+                              @RtvFldDesc("CMCUST=$(V_ODSHTO)", "HDCUST", "CMCNA1", fieldDesc)
+                              %INCLUDE "SetRowClass.icl"
+                              <tr class="$(rowClass)">
+%{  MD05 Begin: Add line item sequence number.  %}
+                                <td class="colnmbr">&nbsp;</td>
+%{  MD05 End: Add line item sequence number.  %}
+                                  <td>&nbsp;</td>
+                                      %if (custItemFlag == "Y")
+	   	                           <td>&nbsp;</td>
+	   	                       %endif
+                                  <td class="colalph">&nbsp; &nbsp; Ship-To: $(fieldDesc)</td>
+                                  <td colspan="7">&nbsp;</td>
+                              </tr>
+                          %endif
+   		       %endif
+                      %if (multShipVia == "Y")
+                          %if (hdrShipVia != V_ODSVSV && V_ODSVSV != "")
+                              @RtvFldDesc("SVSVSV='$(V_ODSVSV)'", "HDSHPV", "SVSVDS", fieldDesc)
+                              %INCLUDE "SetRowClass.icl"
+                              <tr class="$(rowClass)">
+                                  <td>&nbsp;</td>
+                                      %if (custItemFlag == "Y")
+	   	                           <td>&nbsp;</td>
+	   	                       %endif
+                                  <td class="colalph">&nbsp; &nbsp; Ship Via: $(fieldDesc)</td>
+                                  <td colspan="7">&nbsp;</td>
+                              </tr>
+                          %endif
+   		       %endif
+                  %endif
+
+                  @dtw_assign(lineNumber, "$(V_ODORL#)")
+                  %if (IMKIT != "")
+                      %if (IMKIT == "F")
+                          @Feat_Option_Query(orderControlNumber, orderNumber, lineNumber, optionTable)
+                      %else
+                          @Kit_Options_Query(profileHandle, dataBaseID, orderControlNumber, orderNumber, lineNumber, optionTable)
+                      %endif
+                      @dtw_tb_rows(optionTable, rows)
+                      %if (rows > "0")
+                          @dtw_assign(x, "1")
+                          @dtw_assign(saveFeat, "")
+                          %while(x <= rows){
+                              %if (IMKIT == "F")
+           		            @dtw_assign(FEAT, @dtw_tb_rgetv(optionTable, x, @dtw_tb_rQuerycolnonj(optionTable, "OOFEAT")))
+           		            @dtw_assign(OITM, @dtw_tb_rgetv(optionTable, x, @dtw_tb_rQuerycolnonj(optionTable, "OOOPTN")))
+           		            @dtw_assign(QORD, @dtw_tb_rgetv(optionTable, x, @dtw_tb_rQuerycolnonj(optionTable, "OOQORD")))
+                              %else
+           		            @dtw_assign(CITM, @dtw_tb_rgetv(optionTable, x, @dtw_tb_rQuerycolnonj(optionTable, "OKCITM")))
+           		            @dtw_assign(OITM, @dtw_tb_rgetv(optionTable, x, @dtw_tb_rQuerycolnonj(optionTable, "OKOITM")))
+           		            @dtw_assign(QORD, @dtw_tb_rgetv(optionTable, x, @dtw_tb_rQuerycolnonj(optionTable, "OKQORD")))
+                                   @dtw_assign(FEAT, CITM)
+                              %endif
+
+                              %if (saveFeat != FEAT)
+                                  @dtw_assign(saveFeat, FEAT)
+                                  %INCLUDE "SetRowClass.icl"
+                                  <tr class="$(rowClass)">
+%{  MD05 Begin: Add line item sequence number.  %}
+                                    <td class="colnmbr">&nbsp;</td>
+%{  MD05 End: Add line item sequence number.  %}
+                                      %if (custItemFlag == "Y")
+	   	                           <td>&nbsp;</td>
+	   	                       %endif
+   		                       <td>&nbsp;</td>
+                                      <td class="colalph">$(saveFeat)</td>
+                                      %if (displaySynonyms == "Y")
+                                          <td>&nbsp;</td>
+                                      %endif
+                                      <td class="colalph">&nbsp;</td>
+                                      <td class="colalph">&nbsp;</td>
+                                      <td class="colalph">&nbsp;</td>
+                                      <td class="colalph">&nbsp;</td>
+                                  </tr>
+                              %endif
+
+                              %if (OITM != "")
+	      	                    @dtw_assign(itemNumber, "$(OITM)")
+                              %else
+	      	                    @dtw_assign(itemNumber, "$(CITM)")
+                              %endif
+                              @RtvFldDesc("IMITEM='$(itemNumber)'", "HDIMST", "IMIMDS", itemDescription)
+                              @Format_Nbr(QORD, F_QORD, $(qtyNbrDec), $(qtyEditCode), "Y", "", "")
+
+                              %INCLUDE "SetRowClass.icl"
+                              <tr class="$(rowClass)">
+                                  %if (custItemFlag == "Y")
+	   	                       <td>&nbsp;</td>
+	   	                   %endif
+%{  MD05 Begin: Add line item sequence number.  %}
+                                  <td class="colnmbr">&nbsp;</td>
+%{  MD05 End: Add line item sequence number.  %}
+                                  <td>&nbsp;</td>
+                                  <td class="colalph">&nbsp; &nbsp; &nbsp; $(itemDescription)</td>
+                                  %if (displaySynonyms == "Y")
+                                      <td>&nbsp;</td>
+                                  %endif
+                                  <td class="colalph">&nbsp;</td>
+                                  <td class="colnmbr">$(F_QORD)</td>
+                                  <td class="colalph">&nbsp;</td>
+                                  <td class="colalph">&nbsp;</td>
+                              </tr>
+                              @dtw_add(x, "1", x)
+                          %}
+                      %endif
+                  %endif
+
+                  @Open_History_Comments(profileHandle, dataBaseID, orderNumber, orderSequence, lineNumber, releaseNumber, orderDocType, type, commentTable)
+                  @dtw_tb_rows(commentTable, rows)
+                  %if (rows > "0")
+                      @dtw_assign(x, "1")
+                      %while(x <= rows){@dtw_tb_getv(commentTable, x, "1", cmt)@dtw_add(x, "1", x)
+                          %INCLUDE "SetRowClass.icl"
+                          <tr class="$(rowClass)">
+                              %if (cmt != "")
+                                  <td colspan="2">&nbsp;</td><td class="colalph" colspan="6">$(cmt)</td>
+                              %else
+                                  <td colspan="2" >&nbsp;</td><td class="colalph" colspan="6">&nbsp;</td>
+                              %endif
+                          </tr>
+                      %}
+                  %endif
+          %}
+
+          @dtw_assign(lineNumber, "999")
+          @Open_History_Comments(profileHandle, dataBaseID, orderNumber, orderSequence, lineNumber, releaseNumber, orderDocType, type, commentTable)
+          @dtw_tb_rows(commentTable, rows)
+          %if (rows > "0")
+              @dtw_assign(x, "1")
+              %while(x <= rows){@dtw_tb_getv(commentTable, x, "1", cmt)@dtw_add(x, "1", x)
+              %INCLUDE "SetRowClass.icl"
+                  <tr class="$(rowClass)">
+                      %if (cmt != "")
+                          <td colspan="2">&nbsp;</td><td class="colalph" colspan="6">$(cmt)</td>
+                      %else
+                          <td colspan="2">&nbsp;</td><td class="colalph" colspan="6">&nbsp;</td>
+                      %endif
+                  </tr>
+              %}
+          %endif
+
+          @Format_Nbr(subTotal, F_subTotal, "2", $(amtEditCode), "", "", "")
+          <tr>
+              <td colspan="5">&nbsp;</td>
+              %if (custItemFlag == "Y")
+                  <td>&nbsp;</td>
+              %endif
+              %if (displaySynonyms == "Y")
+                  <td>&nbsp;</td>
+              %endif
+              <td class="colnmbr">Subtotal</td>
+              <td class="coltotal">$(F_subTotal)</td>
+          </tr>
+
+          %if (shippedNotInv != "Y")
+              %if (freightChg != ".00")
+                  @Format_Nbr(freightChg,  F_freightChg,  "2", $(amtEditCode), "", "", "")
+                  <tr>
+                      <td colspan="5">&nbsp;</td>
+                      %if (custItemFlag == "Y")
+                          <td>&nbsp;</td>
+                      %endif
+                      %if (displaySynonyms == "Y")
+                          <td>&nbsp;</td>
+                      %endif
+                      <td class="colnmbr">Freight Charge</td>
+                      <td class="colnmbr">$(F_freightChg)</td>
+                  </tr>
+              %endif
+
+              %if (stateTax != ".00")
+                  @Format_Nbr(stateTax, F_stateTax, "2", $(amtEditCode), "", "", "")
+                  <tr>
+                      <td colspan="5">&nbsp;</td>
+                      %if (custItemFlag == "Y")
+                          <td>&nbsp;</td>
+                      %endif
+                      %if (displaySynonyms == "Y")
+                          <td>&nbsp;</td>
+                      %endif
+                      <td class="colnmbr">State Tax</td>
+                      <td class="colnmbr">$(F_stateTax)</td>
+      	       </tr>
+              %endif
+
+              %if (countyTax != ".00")
+                  @Format_Nbr(countyTax, F_countyTax, "2", $(amtEditCode), "", "", "")
+                  <tr>
+                      <td colspan="5">&nbsp;</td>
+                      %if (custItemFlag == "Y")
+                          <td>&nbsp;</td>
+                      %endif
+                      %if (displaySynonyms == "Y")
+                          <td>&nbsp;</td>
+                      %endif
+                      <td class="colnmbr">County Tax</td>
+                      <td class="colnmbr">$(F_countyTax)</td>
+                  </tr>
+              %endif
+
+              %if (cityTax != ".00")
+                  @Format_Nbr(cityTax, F_cityTax, "2", $(amtEditCode), "", "", "")
+                  <tr>
+                      <td colspan="5">&nbsp;</td>
+                      %if (custItemFlag == "Y")
+                          <td>&nbsp;</td>
+                      %endif
+                      %if (displaySynonyms == "Y")
+                          <td>&nbsp;</td>
+                      %endif
+                      <td class="colnmbr">City Tax</td>
+                      <td class="colnmbr">$(F_cityTax)</td>
+                  </tr>
+              %endif
+
+              %if (local1Tax != ".00")
+                  @Format_Nbr(local1Tax, F_local1Tax, "2", $(amtEditCode), "", "", "")
+                  <tr>
+                      <td colspan="5">&nbsp;</td>
+                      %if (custItemFlag == "Y")
+                          <td>&nbsp;</td>
+                      %endif
+                      %if (displaySynonyms == "Y")
+                          <td>&nbsp;</td>
+                      %endif
+                      <td class="colnmbr">Local 1 Tax</td>
+                      <td class="colnmbr">$(F_local1Tax)</td>
+                  </tr>
+              %endif
+
+              %if (local2Tax != ".00")
+                  @Format_Nbr(local2Tax, F_local2Tax, "2", $(amtEditCode), "", "", "")
+                  <tr>
+                      <td colspan="5">&nbsp;</td>
+                      %if (custItemFlag == "Y")
+                          <td>&nbsp;</td>
+                      %endif
+                      %if (displaySynonyms == "Y")
+                          <td>&nbsp;</td>
+                      %endif
+                      <td class="colnmbr">Local 2 Tax</td>
+                      <td class="colnmbr">$(F_local2Tax)</td>
+                  </tr>
+              %endif
+
+              %if (local3Tax != ".00")
+                  @Format_Nbr(local3Tax, F_local3Tax, "2", $(amtEditCode), "", "", "")
+                  <tr>
+                      <td colspan="5">&nbsp;</td>
+                      %if (custItemFlag == "Y")
+                          <td>&nbsp;</td>
+                      %endif
+                      %if (displaySynonyms == "Y")
+                          <td>&nbsp;</td>
+                      %endif
+                      <td class="colcode">Local 3 Tax</td>
+                      <td class="colnmbr">$(F_local3Tax)</td>
+                  </tr>
+              %endif
+
+              %if (specialChg != ".00")
+                  @Format_Nbr(specialChg, F_specialChg, "2", $(amtEditCode), "", "", "")
+                  <tr>
+                      <td colspan="5">&nbsp;</td>
+                      %if (custItemFlag == "Y")
+                          <td>&nbsp;</td>
+                      %endif
+                      %if (displaySynonyms == "Y")
+                          <td>&nbsp;</td>
+                      %endif
+                      <td class="colnmbr">Special Charge</td>
+                      <td class="colnmbr">$(F_specialChg)</td>
+                  </tr>
+              %endif
+
+              @Format_Nbr(orderTotal, F_orderTotal, "2", $(amtEditCode), "", "", "")
+              %INCLUDE "SetRowClass.icl"
+              <tr>
+                  <td colspan="5">&nbsp;</td>
+                  %if (custItemFlag == "Y")
+                      <td>&nbsp;</td>
+                  %endif
+                  %if (displaySynonyms == "Y")
+                      <td>&nbsp;</td>
+                  %endif
+                  <td class="colnmbr">Order Total</td>
+                  <td class="coltotal">$(F_orderTotal)</td>
+              </tr>
+
+              %if (creditAmt > "0")
+                  @Format_Nbr(creditAmt, F_creditAmt, "2", $(amtEditCode), "", "", "")
+                  @RtvFldDesc("OECCTP='$(creditType)'", "OECCTM", "OECCDS", fieldDesc)
+                  <tr>
+                      <td colspan="5">&nbsp;</td>
+                      %if (custItemFlag == "Y")
+                          <td>&nbsp;</td>
+                      %endif
+                      %if (displaySynonyms == "Y")
+                          <td>&nbsp;</td>
+                      %endif
+                      <td class="colnmbr">$(fieldDesc)</td>
+                      <td class="colnmbr">$(F_creditAmt)</td>
+                  </tr>
+                  %if (chargeAmt > "0")
+                      @Format_Nbr(chargeAmt, F_chargeAmt, "2", $(amtEditCode), "", "", "")
+                      <tr>
+                          <td colspan="5">&nbsp;</td>
+                          %if (custItemFlag == "Y")
+                              <td>&nbsp;</td>
+                          %endif
+                          %if (displaySynonyms == "Y")
+                              <td>&nbsp;</td>
+                          %endif
+                          <td class="colnmbr">Charge On Account</td>
+                          <td class="colnmbr">$(F_chargeAmt)</td>
+      	            </tr>
+                  %endif
+              %endif
+          %endif
+      </table>
+      $(hrTagAttr)
+      %INCLUDE "Copyright.icl"
+  %}
+%}
+
+%HTML(REPORT) {
+  %INCLUDE "setLibraryList.icl"
+  @Set_SQL(stmtSQL)
+%}

@@ -1,0 +1,359 @@
+%{
+*********************************************************************
+* Copr 1979 2003 An Unpublished Work By Harris Business Group, Inc. *
+* All rights reserved. This work contains trade secrets.            *
+*                  					             *
+*  Job: Order Entry - Update Header Information                     *
+*                                                                   *
+* MD01 MichaelD 06-10-13 Created new drop ship extension file       *
+*                        (GDSHP01F) to store "attention to" name for*
+*                        each drop ship master record. Modify script*
+*                        to support new "attention to" field.       *
+*********************************************************************
+%}
+
+%INCLUDE "$(baseVar)"
+%INCLUDE "EditRoutines.icl"
+%INCLUDE "ErrorMessage.icl"
+%INCLUDE "GenericDirectCallVariables.icl"
+%INCLUDE "Menu.icl"
+%INCLUDE "NewWindowVariables.icl"
+%INCLUDE "NumFormat.icl"
+%INCLUDE "OrderEntry.icl"
+%INCLUDE "VarBase.icl"
+%INCLUDE "YNFlagTable.icl"
+
+%Define {
+  page_title              = "Order Entry"
+  d2wName                 = "OrderEntryAddress.d2w"
+  d2wVarBase              = "$(genericVarBase)&amp;customerNumber=@dtw_rurlescseq(customerNumber)&amp;customerName=@dtw_rurlescseq(customerName)&amp;orderControlNumber=@dtw_rurlescseq(orderControlNumber)"
+  DATABASE                = "*LOCAL"
+  DTW_DEFAULT_REPORT      = "NO"
+  DTW_HTML_TABLE          = "YES"
+  DTW_PAD_PGM_PARMS       = "YES"
+  userHeaderTable         = %table
+  userHeaderCount         = ""
+  userHeaderFields        = ""
+  V_CMRREF                = ""
+  tabID                   = "ADDRESS"
+%}
+
+%MACRO_FUNCTION Set_URL (INOUT workURL) {
+  @dtw_replace(workURL, "@@customerName", "@dtw_rurlescseq(customerName)", "1", "a", workURL)
+  @dtw_replace(workURL, "@@customerNumber", "@dtw_rurlescseq(customerNumber)", "1", "a", workURL)
+  @dtw_replace(workURL, "@@orderBy", "@dtw_rurlescseq(orderBy)", "1", "a", workURL)
+  @dtw_replace(workURL, "@@orderControlNumber", "@dtw_rurlescseq(orderControlNumber)", "1", "a", workURL)
+%}
+
+%MACRO_FUNCTION Set_SQL (INOUT stmtSQL) {
+  %INCLUDE "$(docType)"	
+  <html>
+      <head>
+	   %INCLUDE "$(headInclude)"
+          @dtw_assign(formName, "Chg")
+          <script TYPE="text/javascript">
+              %INCLUDE "NewWindowOpen.icl"
+              %INCLUDE "OrderEntryConfirm.icl"
+          </script>
+          %INCLUDE "$(genericHead)"
+      </head>
+      <body $(bodyTagAttr) onKeyPress="checkEnterChg()">
+          <!-- Start Of Banner Code -->
+          %INCLUDE "banner.icl"
+          <!-- End Of Banner Code -->
+          <table $(baseTable)>
+              <tr valign="top">
+                  @dtw_assign(pageID, "ORDERHEADER")
+                  <td class="menu">@Menu_Query(profileHandle, dataBaseID, portal, pageID)</td>
+                  <td class="content">
+                      @dtw_assign(stmtSQL, "Select * From OEHDWK Where H1OCTL=$(orderControlNumber)")
+                      %INCLUDE "stmtSQLEnd.icl"
+                      @Order_Header_Query(profileHandle, dataBaseID, stmtSQL)
+                  </td>
+              </tr>
+          </table>
+          <!-- Start Of Trailer Code -->
+          %INCLUDE "trailer.icl"
+          <!-- End Of Trailer Code -->
+      </body>
+  </html>
+%}
+
+%FUNCTION(dtw_sql) Order_Header_Query (IN CHAR(64)    profileHandle,
+                                          CHAR(2)     dataBaseID,
+                                          CHAR(32000) stmtSQL)
+{CALL $(pgmLibrary)HSYSQL_W
+
+  %REPORT{
+      %INCLUDE "OrderEntryProgOpt.icl"
+      %INCLUDE "OrderEntryTabs.icl"
+
+      %ROW {
+          %INCLUDE "OrderEntryRetInfo.icl"
+          %if (shipToName   == billToName &&
+               shipToAdrOne == billToAdrOne)
+               @dtw_assign(dspBillTo, "N")
+          %else
+               @dtw_assign(dspBillTo, "Y")
+          %endif
+
+          %if (dropShip == "Y")
+              <fieldset class="legendBody">
+                  <legend class="legendTitle">
+                      Drop Ship<a onClick="return confirmNoDropShip()" href="$(homeURL)$(cGIPath)$(d2wName)/REMOVEDROPSHIP$(d2wVarBase)&amp;orderNumber=@dtw_rurlescseq(V_H1ORD#)">$(deleteImageSml)</a>
+                  </legend>
+
+                  <div class="quickLinksTop">Number: $(V_H1DSHP)</div>
+                  <table $(contentTable)>
+                      <tr valign=top>
+                          <td rowspan="5" class="dspalph"> $(dropShipName) <br>
+%{
+* MD01 Begin: Add field(s): Attention to name*
+%}
+                              %if (attentionToName != "")
+                                  $(attentionToName) <br>
+                              %endif
+%{
+* MD01 End: Add field(s): Attention to name*
+%}
+                              %if (dropShipAdrOne != "")
+                                  $(dropShipAdrOne) <br>
+                              %endif
+                              %if (dropShipAdrTwo != "")
+                                  $(dropShipAdrTwo) <br>
+                              %endif
+                              %if (dropShipAdrThree != "")
+                                  $(dropShipAdrThree) <br>
+                              %endif
+                              $(dropShipCity), $(dropShipState) $(dropShipZip)
+                          </td>
+                      </tr>
+                  </table>
+              </fieldset>
+          %endif
+
+          <fieldset class="legendBody">
+              <legend class="legendTitle">
+                  %if (dspBillTo == "Y")
+                      Ship-To
+                  %else
+                      Ship-To/Bill-To
+                  %endif
+              </legend>
+
+              <div class="quickLinksTop">Number: $(V_H1SHTO)</div>
+              <table $(contentTable)>
+                  <tr valign=top>
+                      <td rowspan="5" class="dspalph"> $(shipToName) <br>
+                          %if (shipToAdrOne != "")
+                              $(shipToAdrOne) <br>
+                          %endif
+                          %if (shipToAdrTwo != "")
+                              $(shipToAdrTwo) <br>
+                          %endif
+                          %if (shipToAdrThree != "")
+                              $(shipToAdrThree) <br>
+                          %endif
+                          $(shipToCity), $(shipToState) $(shipToZip)
+                      </td>
+                  </tr>
+              </table>
+          </fieldset>
+
+          %if (dspBillTo == "Y")
+              <fieldset class="legendBody">
+                  <legend class="legendTitle">Bill-To</legend>
+                  <div class="quickLinksTop">Number: $(V_H1BLTO)</div>
+                  <table $(contentTable)>
+                      <tr valign=top>
+                          <td rowspan="5" class="dspalph"> $(billToName) <br>
+                              %if (billToAdrOne != "")
+                                  $(billToAdrOne) <br>
+                              %endif
+                              %if (billToAdrTwo != "")
+                                  $(billToAdrTwo) <br>
+                              %endif
+                              %if (billToAdrThree != "")
+                                  $(billToAdrThree) <br>
+                              %endif
+                              $(billToCity), $(billToState) $(billToZip)
+                          </td>
+                      </tr>
+                  </table>
+              </fieldset>
+          %endif
+      %}
+      %INCLUDE "EndTabs.icl"
+      %INCLUDE "Copyright.icl"
+  %}
+%}
+
+%FUNCTION(dtw_directcall) Validate_Data(INOUT CHAR(64)    profileHandle,
+                                        INOUT CHAR(2)     dataBaseID,
+                                        INOUT CHAR(1)     errFound,
+                                        INOUT CHAR(32000) edtVar,                             	
+                                        INOUT CHAR(32000) errVar)
+{%EXEC {HOEUHW_W.PGM %}
+%}
+
+%HTML(DISPLAY) {
+  %INCLUDE "setLibraryList.icl"
+  @Set_SQL(stmtSQL)
+%}
+
+%HTML(REMOVEDROPSHIP) {
+  %INCLUDE "setLibraryList.icl"
+  @DTW_ASSIGN(dropShipZero, "0000000")
+  @Update_Drop_Ship (profileHandle, dataBaseID, orderControlNumber, dropShipZero)
+  @DTW_ASSIGN(updateTotal, "Y")
+  @Update_Misc_Charges (profileHandle, dataBaseID, orderControlNumber, freightCharge, specialCharge, updateTotal)
+  <meta http-equiv="refresh" content="0; URL= $(homeURL)$(cGIPath)$(d2wName)/DISPLAY$(d2wVarBase)&amp;timeStamp=@dtw_rurlescseq(@dtw_rconcat(@dtw_rdate(),@dtw_rtime("X")))">
+%}
+
+%HTML(Edit_Data) {
+  %INCLUDE "setLibraryList.icl"
+  @dtw_mUPPERCASE(referenceNumber)
+  @dtw_mUPPERCASE(termsCode)
+  @dtw_mUPPERCASE(mailingCode)
+  @dtw_mUPPERCASE(shipVia)
+  @dtw_mUPPERCASE(fobCode)
+  @dtw_mUPPERCASE(taxCode)
+  @dtw_mUPPERCASE(creditCardType)
+  @dtw_mUPPERCASE(creditCardAuth)
+  @dtw_mUPPERCASE(userAlpha1)
+  @dtw_mUPPERCASE(userAlpha2)
+  @dtw_mUPPERCASE(userAlpha3)
+  @dtw_mUPPERCASE(userAlpha4)
+  @dtw_mUPPERCASE(userAlpha5)
+  @dtw_mUPPERCASE(holdCode)
+
+  @dtw_assign(reqDate,@dtw_rstrip(reqDate))
+  @dtw_assign(orderDate,@dtw_rstrip(orderDate))
+  @dtw_assign(discountPercent,@dtw_rstrip(discountPercent))
+  @dtw_assign(salesmanNumber,@dtw_rstrip(salesmanNumber))
+  @dtw_assign(commissionPercent,@dtw_rstrip(commissionPercent))
+  @dtw_assign(splitSalesmanNumber,@dtw_rstrip(splitSalesmanNumber))
+  @dtw_assign(splitCommissionPercent,@dtw_rstrip(splitCommissionPercent))
+  @dtw_assign(creditCardExpMonth,@dtw_rstrip(creditCardExpMonth))
+  @dtw_assign(creditCardExpYear,@dtw_rstrip(creditCardExpYear))
+  @dtw_assign(userDate2,@dtw_rstrip(userDate2))
+  @dtw_assign(userDate3,@dtw_rstrip(userDate3))
+  @dtw_assign(userDate4,@dtw_rstrip(userDate4))
+
+  @dtw_assign(edtVar, "")
+  @Concat_Field("@@octl", orderControlNumber)
+  @Concat_Field("@@shto", customerNumber)
+  %if (orderType == "R")
+      @Concat_Field("@@orry", recurDays)
+      @Concat_Field("@@rsdt", startDate)
+      @Concat_Field("@@redt", endDate)
+  %endif
+  %if (@dtw_rpos("@@40", userHeaderFields) > "0")
+      @Concat_Field("@@rqdt", reqDate)
+  %endif
+  %if (@dtw_rpos("@@360", userHeaderFields) > "0")
+      @Concat_Field("@@ordt", orderDate)
+  %endif
+  %if (@dtw_rpos("@@50", userHeaderFields) > "0")
+      @Concat_Field("@@orrf", referenceNumber)
+  %endif
+  %if (@dtw_rpos("@@60", userHeaderFields) > "0")
+      @Concat_Field("@@ctrm", termsCode)
+  %endif
+  %if (@dtw_rpos("@@70", userHeaderFields) > "0")
+      @Concat_Field("@@boal", allowBackorders)
+  %endif
+  %if (@dtw_rpos("@@80", userHeaderFields) > "0")
+      @Concat_Field("@@dspc", discountPercent)
+  %endif
+  %if (@dtw_rpos("@@90", userHeaderFields) > "0")
+      @Concat_Field("@@svsv", shipVia)
+  %endif
+  %if (@dtw_rpos("@@100", userHeaderFields) > "0")
+      @Concat_Field("@@slsm", salesmanNumber)
+  %endif
+  %if (@dtw_rpos("@@110", userHeaderFields) > "0")
+      @Concat_Field("@@smpc", commissionPercent)
+  %endif
+  %if (@dtw_rpos("@@120", userHeaderFields) > "0")
+      @Concat_Field("@@sls1", splitSalesmanNumber)
+  %endif
+  %if (@dtw_rpos("@@130", userHeaderFields) > "0")
+      @Concat_Field("@@sspc", splitCommissionPercent)
+  %endif
+  %if (@dtw_rpos("@@140", userHeaderFields) > "0")
+      @Concat_Field("@@ctxc", taxCode)
+  %endif
+  %if (@dtw_rpos("@@150", userHeaderFields) > "0")
+      @Concat_Field("@@sttx", stateCode)
+      @Concat_Field("@@cntx", countyTaxCode)
+      @Concat_Field("@@cttx", cityTaxCode)
+      @Concat_Field("@@loc1", loc1Code)
+      @Concat_Field("@@loc2", loc2Code)
+      @Concat_Field("@@loc3", loc3Code)
+  %endif
+  %if (@dtw_rpos("@@210", userHeaderFields) > "0")
+      @Concat_Field("@@mail", mailingCode)
+  %endif
+  %if (@dtw_rpos("@@220", userHeaderFields) > "0")
+      @Concat_Field("@@cctp", creditCardType)
+  %endif
+  %if (@dtw_rpos("@@230", userHeaderFields) > "0")
+      @Concat_Field("@@ccno", creditCardNumber)
+  %endif
+  %if (@dtw_rpos("@@240", userHeaderFields) > "0")
+      @Concat_Field("@@ccmm", creditCardExpMonth)
+      @Concat_Field("@@ccyy", creditCardExpYear)
+  %endif
+  %if (@dtw_rpos("@@250", userHeaderFields) > "0")
+      @Concat_Field("@@ccac", creditCardAuth)
+  %endif
+  %if (@dtw_rpos("@@260", userHeaderFields) > "0")
+      @Concat_Field("@@fbcd", fobCode)
+  %endif
+  %if (@dtw_rpos("@@270", userHeaderFields) > "0")
+      @Concat_Field("@@dte2", userDate2)
+  %endif
+  %if (@dtw_rpos("@@280", userHeaderFields) > "0")
+      @Concat_Field("@@dte3", userDate3)
+  %endif
+  %if (@dtw_rpos("@@290", userHeaderFields) > "0")
+      @Concat_Field("@@dte4", userDate4)
+  %endif
+  %if (@dtw_rpos("@@300", userHeaderFields) > "0")
+      @Concat_Field("@@udf1", userAlpha1)
+  %endif
+  %if (@dtw_rpos("@@310", userHeaderFields) > "0")
+      @Concat_Field("@@udf2", userAlpha2)
+  %endif
+  %if (@dtw_rpos("@@320", userHeaderFields) > "0")
+      @Concat_Field("@@udf3", userAlpha3)
+  %endif
+  %if (@dtw_rpos("@@330", userHeaderFields) > "0")
+      @Concat_Field("@@udf4", userAlpha4)
+  %endif
+  %if (@dtw_rpos("@@340", userHeaderFields) > "0")
+      @Concat_Field("@@udf5", userAlpha5)
+  %endif
+  %if (@dtw_rpos("@@350", userHeaderFields) > "0")
+      @Concat_Field("@@hold", holdCode)
+  %endif
+  @dtw_concat(edtVar, "}{", edtVar)
+
+  @Validate_Data(profileHandle, dataBaseID, errFound, edtVar, errVar)
+
+  %if (errFound == "")
+      @DTW_ASSIGN(updateTotal, "Y")
+      @Update_Misc_Charges (profileHandle, dataBaseID, orderControlNumber, freightCharge, specialCharge, updateTotal)
+
+      %if (maintCode == "S")
+          <meta http-equiv="refresh" content="1; URL=$(homeURL)$(cGIPath)ordershippingreview.d2w/DISPLAY$(d2wVarBase)">
+      %else
+          <meta http-equiv="refresh" content="1; URL=$(homeURL)$(cGIPath)orderentryorderreview.d2w/DISPLAY$(d2wVarBase)">
+      %endif
+  %else
+      @EdtVarErr(profileHandle, typeValue, edtVar)
+      @ErrVarErr(profileHandle, typeError, errVar)
+      <meta http-equiv="refresh" content="0; URL=$(homeURL)$(cGIPath)$(d2wName)/DISPLAY$(d2wVarBase)&amp;errFound=@dtw_rurlescseq(errFound)&amp;timeStamp=@dtw_rurlescseq(@dtw_rconcat(@dtw_rdate(),@dtw_rtime("X")))">
+  %endif
+%}

@@ -1,0 +1,1030 @@
+%{
+************************************************************************
+* Steve M July 26, 2007-  add customer terms                           *
+* Steve M July 27, 2007-  add billing location & order terms           *
+* Steve M Sept 27, 2007-  add order number                             *
+* Steve M Feb 19, 2008 -  Don't show Quotes; search for OEORTY         * 
+* Mona H  May 1, 2008  -  display only hold codes+ CRDT,DEP,PDUE,APCD  *
+*                         OR Credit hold                               *
+* Mona H  May 1, 2008  -  Add search column Customer # and order date  *
+* Steve M July 17, 2008-  change max rows to 25, & order               *
+*                         amt >0                                       *
+* Mona H  Sept 24,2008 -  Add fields: Must ship date, Region           *
+*                      -  and ALLOW RESEQUENCING OF CUST REGION        *
+* SteveM  July 1, 2010 -  Break up by region                           *
+* SteveM  Oct 1, 2010  -  New Regions                                  *
+* MD01 MichaelD 2013-07-16 - Art Approval: Modify to not display       *
+*                            orders where hold code is 'SALE' or       *
+*                            where hold code is 'GGGG' and order is    *
+*                            not on credit hold.                       *
+* MD02 MichaelD 2013-09-27 - Art Approval: Modify to support expli-    *
+*                            cit setting of credit hold flag to        *
+*                            requested value. Also remove order        *
+*                            hold (OEHOLD) release column and do       *
+*                            not use OEHOLD value to select orders     *
+*                            for display.                              *
+* MD03 MichaelD 2013-09-30 - Link customer number and name to          *
+*                            customer select page.                     *
+* MD04 MichaelD 2013-09-30 - Increase max rows from 25 to 250.         *
+* MD05 MichaelD 2013-11-27 - Modify to allow users to change credit    *
+*                            flag OEFL05 back to the heretofore        *   
+*                            system-only-generated value of '1' so     *
+*                            they can cause an order to be re-         *
+*                            submitted for credit card payment.        *
+* MD06 MichaelD 2013-12-04 - Art Approval: Will now use multiple       *
+*                            hold code values for art hold instead     *
+*                            of just 'GGGG'. Valid values are in       *
+*                            new file GARTA01FC. Modify program to     *
+*                            validate art hold code values using       *  
+*                            new file rather than literal 'GGGG'.      *   
+* MD07 MichaelD 2013-12-16 - Art Approval: Add new hold code 'PROD'    *
+*                            which will function like 'SALE'.          *
+* MD08 MichaelD 2014-01-27 - Decrease max rows from 250 to 25.         *
+* MD09 MichaelD 2014-01-27 - Art Approval: Modify to display orders    *
+*                            where hold code is 'SALE' or 'PROD'.      *
+* MD10 MichaelD 2015-09-10 - Modify to no longer display orders on     *
+*                            SALE hold. Accounting has resolved        *
+*                            issues that required SALE hold on this    *
+*                            page (per Tina Samuelson).                *
+* MD11 MichaelD 2017-02-03 - Screen returns user to first page of list *
+*                            when an order is released. Modify to      *
+*                            return user to page in list from which    *
+*                            order was released.                       *
+* MD12 MichaelD 2017-02-27 - Add support for new credit hold           *
+*                            condition 7 (CC Auth-Acct Bal).           *
+* MD13 MichaelD 2017-03-06 - Add support for new credit hold           *
+*                            conditions (8=CC Invalid and              *
+*                            9=CC Declined).                           *
+* MD14 MichaelD 2017-05-16 - Modify to extend MD10 by adding new       *
+*                            hold codes TRNG (Training) and PRON       *
+*                            (Pronto) to the list of hold codes        *
+*                            that preclude an order from being dis-    *
+*                            played on this selection page. These      *
+*                            hold codes should function the same       *
+*                            way SALE hold does and should prevent     *
+*                            Account Services staff from seeing and    *
+*                            attempting to process orders on TRNG      *
+*                            and PRON hold codes.                      *
+* MD15 MichaelD 2017-09-20 - Available Credit column was not being     *
+*                            populated due to missing arguments and    *
+*                            a missing function call. Modify to        *
+*                            retrieve necessary arguments and call     *
+*                            @CustArBalance() function.                *
+* MD16 MichaelD 2017-09-20 - A/R assumes that if customer's A/R is     *
+*                            current, the A/R balance should not be    *
+*                            used in the decision to hold or           *
+*                            release an order. Modify to flag an       *
+*                            order as "release-able" if A/R is         *
+*                            current and total of candidate order      *
+*                            does not exceed customer's credit         *
+*                            limit. (Requires calling the aging        *
+*                            function for the customer of each         *
+*                            order on this page.) Also, per Tina S     *
+*                            Aug 2017 do not flag for release if       *
+*                            either order or customer has certain      *
+*                            terms codes, even if other conditions     *
+*                            would allow a release. Also, per Tina     *
+*                            S do not flag for release if credit       *
+*                            hold value is 8 (Invalid CC) or 9 (CC     *
+*                            declined).                                *
+* MD17 MichaelD 2018-07-12 - Modify for new organization of regions    *
+*                            into groups per IT-2422.                  *
+************************************************************************
+
+*********************************************************************
+* Copr 1979 2003 An Unpublished Work By Harris Business Group, Inc. *
+* All rights reserved. This work contains trade secrets.            *
+*                  					            *
+*  Job: Order Entry Release Orders On Hold                          *
+*********************************************************************
+%}
+
+%INCLUDE "$(baseVar)"
+%INCLUDE "ErrorMessage.icl"
+%INCLUDE "GenericDirectCallVariables.icl"
+%INCLUDE "Menu.icl"
+%INCLUDE "NewWindowVariables.icl"
+%INCLUDE "VarBase.icl"
+%INCLUDE "WildCard.icl"
+%INCLUDE "EditRoutines.icl"
+
+%Define {	
+  page_title              = "Release Orders On Hold - West"
+  d2wName                 = "ReleaseOrdersHoldWest.d2w"
+  d2wVarBase              = "$(genericVarBase)"
+  nextPrevVar             = "$(d2wVarBase)"
+  wildDftVar              = "ENTRY$(d2wVarBase)"
+  currentURL              = "$(d2wName)/ENTRY$(d2wVarBase)&amp;START_ROW_NUM=@dtw_rurlescseq(START_ROW_NUM)"
+  programName             = "HOEOCH"
+  DATABASE                = "*LOCAL"
+  DTW_DEFAULT_REPORT      = "NO"
+  RPT_MAX_ROWS            = "10"
+  ROW_NUM                 = "0"
+  START_ROW_NUM           = "1"
+  %{dspMaxRows              = "$(dspMaxRowsDft)" %}
+%{ MD04 Begin/End: Increase max rows from 25 to 250. * %}
+%{ MD08 Begin/End: Decrease max rows from 250 to 25. * %}
+  dspMaxRows              = "25"
+  prtMaxRows              = "$(prtMaxRowsDft)"
+  rowIndexNext            = "1"
+  totalPages              = "0"
+  advanceSearch           = "N"
+%}
+	
+%MACRO_FUNCTION Set_URL (INOUT workURL) {
+%}
+
+%MACRO_FUNCTION Set_SQL (INOUT stmtSQL) {
+  %INCLUDE "$(docType)"	
+  <html>
+      <head>
+          %INCLUDE "$(headInclude)"
+          <script TYPE="text/javascript">
+              %INCLUDE "AJAXRequest.icl"
+              %INCLUDE "SaveCurrentURL.icl"
+	       %INCLUDE "NumEdit.icl"
+              %INCLUDE "CheckEnterSearch.icl"
+              function validate(searchForm) {
+                  if (editNum(document.Search.srchOrder, 8, 0))
+                      return true;
+              }
+          </script>
+%{
+* MD02 Begin: Add jQuery library. *
+%}
+          <script src="$(homeURL)/HarrisDataEIP/Custom/jquery-1.10.2.min.js" type="text/javascript"></script>
+%{
+* MD02 End: Add jQuery library. *
+%}
+          %INCLUDE "$(genericHead)"
+      </head>
+
+      <body $(bodyTagAttr) onKeyPress="checkEnterSearch()">
+          <!-- Start Of Banner Code -->          %INCLUDE "banner.icl"
+          <!-- End Of Banner Code -->
+          <table $(baseTable)>
+              <tr valign="top">
+                  %if (formatToPrint == "")
+                      @dtw_assign(pageID, "ORDERELEASEORDERHOLD")
+                      <td class="menu">@Menu_Query(profileHandle, dataBaseID, portal, pageID)</td>
+                  %endif
+                  <td class="content">
+                      @dtw_assign(uv_CustomerName, "OEBLTO")
+                      %INCLUDE "userview.icl"
+
+                      @dtw_assign(programName, "HOEOCH")
+                      @pgmOptSecurity(profileHandle, dataBaseID, programName, sec_01, sec_02, sec_03, sec_04, sec_05, sec_06, sec_07, sec_08, sec_09, sec_10, sec_11, sec_12, sec_13, sec_14, sec_15)
+
+                      %INCLUDE "stmtSQLClear.icl"
+%{
+* Mona H  Sept 24,2008 - Add fields: Must ship date (OEDTE2), Region (CMCRGN)         *
+%}
+                      @dtw_concat(stmtSQL, " Select OEORD#, OEBLTO, OEHOLD, OECTRM, OEFL05, OEFL10, OETIVA, OEBDTE, OEDTE2, ", stmtSQL)
+                      @dtw_concat(stmtSQL, " CMCNA1, CMCNA1U, CMCTRM, CMLOC#, CMCCRL, CMFCRL, CMCPOB, CMCRGN, CMST ", stmtSQL)
+%{
+* MD15 Begin: Fix Available Credit column. Add currency type to column selection. *
+%}
+                      @dtw_concat(stmtSQL, ", CMCURT ", stmtSQL)
+%{
+* MD15 End: Fix Available Credit column. Add currency type to column selection. *
+%}
+                      @dtw_concat(fileSQL, " OEORHD ", fileSQL)
+                      @dtw_concat(fileSQL, " inner join HDCUST on CMCUST=OEBLTO ", fileSQL)
+                      %if (sec_01 == "Y" && sec_02 == "Y")
+
+%{
+* Mona H  May 1, 2008 - display only hold codes+ CRDT,DEP,PDUE,APCD*
+replaced this line: @dtw_concat(selectSQL, " (OEHOLD>' ' or OEFL05='1') ", selectSQL)
+* Steve   July 17, 2008 - Don't show 0.00 orders *
+replaced this line: @dtw_concat(selectSQL," (OEHOLD IN ('CRDT', 'DEP ', 'PDUE', 'APCD') OR (OEFL05='1')) ", selectSQL)
+* Steve July 1, 2010
+replaced this line: @dtw_concat(selectSQL," (OEHOLD IN ('CRDT', 'DEP ', 'PDUE', 'APCD') OR (OEFL05='1')) AND OETIVA>0 ", selectSQL) 
+* MD02 - Select additional (new) credit hold code values.
+Replaced this line: @dtw_concat(selectSQL," (OEHOLD IN ('CRDT', 'DEP ', 'PDUE', 'APCD') OR (OEFL05='1')) AND (OETIVA>0 AND ", selectSQL)
+%}
+
+                      @dtw_concat(selectSQL," ((OEFL05 IN ('1','3','4','5','6','7','8','9'))) AND (OETIVA>0 AND ", selectSQL) 
+%{ * MD17 Begin: Reorganize regions into groups. * %}
+%{ Replaced:          @dtw_concat(selectSQL," (CMCRGN<>'NWENG' and CMCRGN<>'DIXIE' and CMCRGN<>'GULF' and ", selectSQL) %}
+%{ Replaced:          @dtw_concat(selectSQL,"  CMCRGN<>'OHIO' and CMCRGN<>'INTL')) ", selectSQL)  %}
+                      @dtw_concat(selectSQL," (CMCRGN IN('CANAD'))) ", selectSQL)
+%{ * MD17 End: Reorganize regions into groups. * %}
+
+%{
+* Mona H  May 1, 2008 - display only hold codes+ CRDT,DEP,PDUE,APCD*
+%}
+                      %elseif (sec_01 == "Y")
+                          @dtw_concat(selectSQL, " OEHOLD>' ' ", selectSQL)
+                      %elseif (sec_02 == "Y")
+%{
+* MD02 Begin: Select additional (new) credit hold code values. *
+Replaced this line: @dtw_concat(selectSQL, " OEFL05='1' ", selectSQL)
+%}
+                          @dtw_concat(selectSQL, " OEFL05 IN ('1','3','4','5','6','7','8','9') ", selectSQL)
+%{
+* MD02 End: Select additional (new) credit hold code values. *
+%}
+                      %elseif (sec_01 == "N" && sec_02 == "N")
+                          @dtw_concat(selectSQL, " OEFL05<>OEFL05 ", selectSQL)
+                      %endif
+                      @dtw_concat(selectSQL, " and OEORST='O' and OEORTY <> 'Q'", selectSQL)
+%{
+* MD01 Begin: Do not select orders on SALE hold, and orders on GGGG hold but not on credit hold. *
+%}
+%{
+* MD07 Replaced following line: @dtw_concat(selectSQL," AND (OEHOLD NOT IN ('SALE')) ", selectSQL) *
+%}
+%{
+* MD09 Removed following line: @dtw_concat(selectSQL," AND (OEHOLD NOT IN ('SALE','PROD')) ", selectSQL)
+%}
+%{
+* MD06 Replaced following line: @dtw_concat(selectSQL," AND NOT (OEHOLD IN ('GGGG') AND OEFL05 IN ('0', '2')) ", selectSQL)
+%}
+                      @dtw_concat(selectSQL," AND NOT (OEHOLD IN (SELECT A1ARTH FROM GARTA01FC) AND OEFL05 IN ('0', '2')) ", selectSQL)                       
+%{
+* MD01 End: Do not select orders on SALE hold, and orders on GGGG hold but not on credit hold. *
+%}
+%{
+* MD10 Begin: Do not select orders on SALE hold. *
+%}
+%{
+* MD14 Begin: Do not select orders on SALE, TRNG, and PRON holds.
+%}
+                      @dtw_concat(selectSQL," AND NOT OEHOLD IN('SALE','TRNG','PRON') ", selectSQL) 
+%{
+* MD14 End: Do not select orders on SALE, TRNG, and PRON holds.
+%}
+%{
+* MD10 End: Do not select orders on SALE hold. *
+%}
+ $(selectSQL)
+                      %INCLUDE "stmtSQLSelect.icl"
+                      @dtw_concat(stmtSQL, " Order By $(orderBy) ", stmtSQL)
+                      %INCLUDE "stmtSQLEnd.icl"
+                      %INCLUDE "stmtSQLTotalRows.icl"
+                      @ReleaseOrder_Query(profileHandle, dataBaseID, stmtSQL)
+                  </td>
+              </tr>
+          </table>
+          <!-- Start Of Trailer Code -->
+          %INCLUDE "trailer.icl"
+          <!-- End Of Trailer Code -->
+%{
+* MD02 Begin: Add Gemini javascript functions. *
+%}
+<script type="text/javascript">
+
+var cj = jQuery.noConflict();
+cj(document).ready(function() {
+
+    // Store orig credit flag value for each order in jQuery "data" field.
+    cj("select[id^=slt_]").each(function() {
+        cj(this).data("orig_value", cj(this).val());
+    });
+
+    // Add function to process changed selection lists.
+    cj("select[id^=slt_]").change(function() {
+        gm_process_release_change(this);
+    });
+});
+
+function gm_process_release_change(slt) {
+
+        // Process changed selection list.
+        var order_number = "";
+        var release_flag_old = cj(slt).data("orig_value");
+        var release_flag_new = "";
+        var base_url = "$(homeURL)$(cGIPath)$(d2wName)/EDIT_DATA$(d2wVarBase)";
+        var parameters = [];
+        var release_url = "";
+        
+        // Remove "slt_" prefix from <select> id to obtain order number.
+        order_number = slt.id.replace("slt_","");
+        
+        // Retrieve value of selected release flag to pass to server.
+        release_flag_new = slt.options[slt.selectedIndex].value;
+        
+        // Don't submit update if selection didn't change.
+        if (release_flag_old == release_flag_new) {
+            alert("New value same as old value. No update done.");
+            return false;
+        }
+        
+//
+// MD05 Begin: Remove this validation so user is now allowed to change flag to '1'.
+//
+        // Reset selection if user selects 1 (On hold).
+//        if (release_flag_new == 1) {
+//            cj("#" + slt.id + " option[value=" + release_flag_old + "]").prop("selected", true);
+//            alert("Cannot change release flag to 1. Flag set back to original value.");
+//            return false;
+//        }
+//
+// MD05 End: Remove this validation so user is now allowed to change flag to '1'.
+//
+        
+        // Reset selection if user selects 2 (Released).
+        if (release_flag_new == 2) {
+            cj("#" + slt.id + " option[value=" + release_flag_old + "]").prop("selected", true);
+            alert("Cannot change release flag to 2. Use the edit icon on the left to release order. Flag set back to original value.");
+            return false;
+        }
+        
+        // Release flag for "2-Released" must be "C".
+        if (release_flag_new == "2") {
+            release_flag_new = "C";
+        }
+        
+        // Assemble URL to call to release selected order.
+        parameters = {
+            "orderNumber" : order_number,
+            "releaseFlag" : release_flag_new
+        }
+        release_url = gm_format_release_url(base_url, parameters);
+        
+        // Go there!
+        window.location.href = release_url;
+}
+
+function gm_format_release_url(rqs_url, extra_parameters) {
+    var extra_parameters_encoded = cj.param(extra_parameters);
+    var seperator = rqs_url.indexOf('?') == -1 ? "?" : "&";
+
+    return(rqs_url + seperator + extra_parameters_encoded);
+}
+
+</script>
+%{
+* MD02 End: Add Gemini javascript functions. *
+%}
+      </body>
+  </html>
+%}
+
+%FUNCTION(dtw_sql) ReleaseOrder_Query (IN   CHAR(64)    profileHandle,
+				             CHAR(2)     dataBaseID,
+                                            CHAR(32000) stmtSQL)
+{CALL $(pgmLibrary)HSYSQL_W
+
+  %REPORT{
+      <table $(contentTable)>
+          <colgroup>
+              <col width="80%">
+              <col width="15%">
+          <tr><td><h1>$(page_title)</h1></td>
+              %if (formatToPrint != "Y")
+                  <td class="toolbar">
+                      <a href="$(homeURL)$(cGIPath)$(d2wName)/ENTRY$(d2wVarBase)&amp;formatToPrint=Y" target=_blank>$(formatPrintDesc)</a>
+                      %INCLUDE "HelpPage.icl"
+                  </td>
+              %endif
+          </tr>
+      </table>
+      %INCLUDE "ConfMessageDisplay.icl"
+
+      $(hrTagAttr)
+			
+      %if (formatToPrint != "Y")
+          <form class="formClass" METHOD=POST NAME="Search" onSubmit="return validate(document.Search)" ACTION="$(homeURL)$(cGIPath)$(d2wName)/WILDCARD$(d2wVarBase)$(orderByVarBase)&amp;wildCardSearch=">
+              <table $(quickSearchTable)>
+                  <tr>
+                      <th class="colhdr"> Customer Name</th>
+                      <th class="colhdr"> Order <br> Number</th>
+                      <th class="colhdr"> Hold <br> Code</th>
+                      <th class="colhdr"> Customer <br> Terms</th>
+%{
+* MD02 Begin: Add search column for credit hold value. *
+%}
+                      <th class="colhdr"> Credit <br /> Hold <br /> Value</th>
+%{
+* MD02 End: Add search column for credit hold value. *
+%}
+                      <th class="colhdr"> Order <br> Terms</th>
+                      <th class="colhdr"> Billing <br> Location</th>
+%{
+* Mona H  May 1, 2008 - Add search column Customer Number and order date *
+%}
+
+                      <th class="colhdr"> Customer <br> Number</th>
+                      <th class="colhdr"> Order Date<br> (mmddyy) </th>
+
+%{
+* Mona H  May 1, 2008 - Add search column Customer Number and order date *
+%}
+                  </tr>
+                  <tr>
+                      <td class="inputalph">
+                          <input type="text" name="srchName" size="20" maxlength="30">
+                          <input type="hidden" name="operName" value="LIKE">
+                      </td>
+                      <td class="inputnmbr">
+                          <input type="text" name="srchOrder" size="8" maxlength="8">
+                          <input type="hidden" name="operOrder" value="=">
+                      </td>
+                      <td class="inputalph">
+                          <input type="text" name="srchHold" size="4" maxlength="4">
+                          <input type="hidden" name="operHold" value="LIKE">
+                      </td>
+                      <td class="inputalph">
+                          <input type="text" name="srchCTerms" size="6" maxlength="2">
+                          <input type="hidden" name="operCTerms" value="LIKE">
+                      </td>
+%{
+* MD02 Begin: Add search column for credit hold code. *
+%}
+                      <td class="inputnmbr">
+                          <input type="text" name="srchCreditHold" size="6" maxlength="1">
+                          <input type="hidden" name="operCreditHold" value="LIKE">
+                      </td>
+%{
+* MD02 End: Add search column for credit hold code. *
+%}
+                      <td class="inputalph">
+                          <input type="text" name="srchOTerms" size="6" maxlength="2">
+                          <input type="hidden" name="operOTerms" value="LIKE">
+                      </td>
+                      <td class="inputnmber">
+                          <input type="text" name="srchBillingLoc" size="6" maxlength="3">
+                          <input type="hidden" name="operBillingLoc" value="=">
+                      </td>
+%{
+* Mona H  May 1, 2008 - Add search column Customer # and Order Date*
+%} 
+
+                      <td class="inputnmbr">
+                          <input type="text" name="srchCust" size="7" maxlength="7">
+                          <input type="hidden" name="operCust" value="=">
+                      </td>
+
+                      <td class="inputnmbr">
+                          <input type="text" name="srchOrdDate" size="6" maxlength="6">
+                          <input type="hidden" name="operOrdDate" value="=">
+                      </td>
+%{
+* Mona H  May 1, 2008 - Add search column Customer # and Order Date*
+%}
+                     <td><a href="javascript:check(document.Search)">$(goSearchImage)</a></td>
+                  </tr>
+              </table>
+              <script TYPE="text/javascript">
+                  document.Search.srchName.focus();
+              </script>
+          </form>
+	
+          %INCLUDE "WildCardPage.icl"
+      %endif
+
+      <table $(contentTable)>
+          @dtw_assign(orderByVar, "$(d2wVarBase)$(searchVarBase)")
+          <tr>
+              %if (formatToPrint == "")
+%{
+* MD02 Begin/End: Remove "Release (order) Hold" column. *
+*                  <th class="colhdr">Release<br>Hold</th>
+%}
+                  <th class="colhdr">Release<br>Credit<br>Hold</th>
+              %endif
+              @OrderBy_Sort("OEORD#", sortVar)
+              <th class="colhdr$(sortVar)"><a href="$(homeURL)$(cGIPath)$(d2wName)/ORDERBY$(orderByVar)&amp;sequence=orderNumber" title="Sequence By Order Number"> Order <br> Number</a></th>
+              @OrderBy_Sort("OEBLTO", sortVar)
+              <th class="colhdr$(sortVar)"><a href="$(homeURL)$(cGIPath)$(d2wName)/ORDERBY$(orderByVar)&amp;sequence=customerNumber" title="Sequence By Customer Number, Order Number"> Customer <br> Number</a></th>
+              @OrderBy_Sort("CMCNA1U", sortVar)
+              <th class="colhdr$(sortVar)"><a href="$(homeURL)$(cGIPath)$(d2wName)/ORDERBY$(orderByVar)&amp;sequence=customerName" title="Sequence By Customer Name, Order Number"> Customer Name</a></th>
+	      @OrderBy_Sort("OEBDTE", sortVar)
+              <th class="colhdr$(sortVar)"><a href="$(homeURL)$(cGIPath)$(d2wName)/ORDERBY$(orderByVar)&amp;sequence=orderDate" title="Sequence By Order Date, Order Number"> Order Date</a></th>
+	      @OrderBy_Sort("OEHOLD", sortVar)
+              <th class="colhdr$(sortVar)"><a href="$(homeURL)$(cGIPath)$(d2wName)/ORDERBY$(orderByVar)&amp;sequence=holdCode" title="Sequence By Hold Code, Order Number"> Hold <br> Code</a></th>
+              @OrderBy_Sort("CMCTRM", sortVar)
+              <th class="colhdr$(sortVar)"><a href="$(homeURL)$(cGIPath)$(d2wName)/ORDERBY$(orderByVar)&amp;sequence=custTerms" title="Sequence By Customer Terms"> Customer <br> Terms</a></th>
+%{
+* MD02 Begin: Add new credit hold values. *
+%}
+              @OrderBy_Sort("OEFL05", sortVar)
+              %if (formatToPrint == "Y")
+                  <th class="colhdr"><a href="$(homeURL)$(cGIPath)$(d2wName)/ORDERBY$(orderByVar)&amp;sequence=creditHoldCode" title="Sequence By Credit Hold Code">Credit<br>Hold<br>Value</a></th>
+              %else
+                  <th class="colhdr"><a href="$(homeURL)$(cGIPath)$(d2wName)/ORDERBY$(orderByVar)&amp;sequence=creditHoldCode" title="Sequence By Credit Hold Code">Change<br>Credit<br>Hold<br>Value</a></th>
+              %endif
+%{
+* MD02 End: Add new credit hold code values. *
+%}
+              @OrderBy_Sort("OECTRM", sortVar)
+              <th class="colhdr$(sortVar)"><a href="$(homeURL)$(cGIPath)$(d2wName)/ORDERBY$(orderByVar)&amp;sequence=orderTerms" title="Sequence By Order Terms"> Order <br> Terms</a></th>
+              @OrderBy_Sort("CMLOC#", sortVar)
+              <th class="colhdr$(sortVar)"><a href="$(homeURL)$(cGIPath)$(d2wName)/ORDERBY$(orderByVar)&amp;sequence=billingLoc" title="Sequence By Billing Location"> Billing <br> Location</a></th>
+              <th class="colhdr">Order Total</th>
+              <th class="colhdr">Available Credit</th>
+              <th class="colhdr">Credit Limit</th>
+%{
+* MD16 Start: Add column for auto-release. *
+%}
+              <th class="colhdr">Auto-release?</th>
+%{
+* MD16 End: Add column for auto-release. *
+%}
+%{
+*START  Mona H  Sept 24,2008 - Add fields: Must ship date (OEDTE2), Region (CMCRGN)   ALLOW RESEQUENCING OF CUST REGION     *
+%}
+              <th class="colhdr">Must Ship</th>
+              @OrderBy_Sort("CMCRGN", sortVar)
+              <th class="colhdr$(sortVar)"><a href="$(homeURL)$(cGIPath)$(d2wName)/ORDERBY$(orderByVar)&amp;sequence=customerRegion" title="Sequence By Customer Region, Order Number"> Customer Region</a></th>
+<th class="colhdr">State<br>Province</th>
+
+
+%{
+*END    Mona H  Sept 24,2008 - Add fields: Must ship date (OEDTE2), Region (CMCRGN)  ALLOW RESEQUENCING OF CUST REGION       *
+%}
+          </tr>
+          %INCLUDE "NoRecordsFound.icl"
+			
+          @pgmOptSecurity(profileHandle, dataBaseID, programName, sec_01, sec_02, sec_03, sec_04, sec_05, sec_06, sec_07, sec_08, sec_09, sec_10, sec_11, sec_12, sec_13, sec_14, sec_15)
+
+          %ROW{
+
+              %INCLUDE "SetRowClass.icl"
+
+              @dtw_assign(customerNumber, V_OEBLTO)
+              @dtw_assign(arBalanceType, "I")
+              @dtw_assign(arBalanceCurrency, "")
+%{
+* MD15 Begin: Fix Available Credit column. Load customer's currency and call function to retrieve AR balance. *
+%}
+              @dtw_assign(arBalanceCurrency, $(V_CMCURT))
+              @CustArBalance(profileHandle, dataBaseID, customerNumber, arBalanceType, arBalanceCurrency, arBalanceAmount)
+%{
+* MD15 End: Fix Available Credit column. Load customer's currency and call function to retrieve AR balance. *
+%}
+%{
+* MD16 Begin: Re-age customer for current order. *
+%}
+              @dtw_assign(arBalanceAmountOver, "0")
+              @dtw_assign(autoReleaseOk, "Yes")
+              @dtw_assign(creditLimit, @DTW_rADD($(V_CMCCRL),$(V_CMFCRL)))
+              
+              %if( autoReleaseOk == "Yes" )
+                %if( ( V_CMCTRM == "98")
+                  || (V_CMCTRM == "CN")
+                  || (V_CMCTRM == "99")
+                  || (V_CMCTRM == "EC")
+                  || (V_CMCTRM == "24")
+                  || (V_CMCTRM == "25")
+                  || (V_CMCTRM == "9")
+                  || (V_CMCTRM == "8")
+                  || (V_CMCTRM == "7")
+                  || (V_CMCTRM == "23")
+                  || (V_CMCTRM == "12")
+                  || (V_CMCTRM == "3")
+                  || (V_CMCTRM == "16")
+                  || (V_CMCTRM == "30") )
+                  @dtw_assign(autoReleaseOk, "No")
+                %endif
+              %endif
+              
+              %if( autoReleaseOk == "Yes" )
+                %if( ( V_OECTRM == "98")
+                  || (V_OECTRM == "CN")
+                  || (V_OECTRM == "99")
+                  || (V_OECTRM == "EC")
+                  || (V_OECTRM == "24")
+                  || (V_OECTRM == "25")
+                  || (V_OECTRM == "9")
+                  || (V_OECTRM == "8")
+                  || (V_OECTRM == "7")
+                  || (V_OECTRM == "23")
+                  || (V_OECTRM == "12")
+                  || (V_OECTRM == "3")
+                  || (V_OECTRM == "16")
+                  || (V_OECTRM == "30") )
+                  @dtw_assign(autoReleaseOk, "No")
+                %endif
+              %endif
+              
+              %if( autoReleaseOk == "Yes" )
+                %if( V_OEFL05 == "8" || V_OEFL05 == "9") 
+                  @dtw_assign(autoReleaseOk, "No")
+                %endif
+              %endif
+              
+              %if( autoReleaseOk == "Yes" )
+                @LoadARAging(profileHandle, customerNumber)
+                @CustArBalanceOver(profileHandle, customerNumber, arBalanceAmountOver)
+                %if( arBalanceAmountOver > "0" )
+                  @dtw_assign(autoReleaseOk, "No")
+                %endif
+              %endif
+              
+              %if( autoReleaseOk == "Yes" )
+                @dtw_assign(creditAfterOrder, @dtw_rsubtract($(creditLimit),$(V_OETIVA)))
+                %if( creditAfterOrder < "0" )
+                  @dtw_assign(autoReleaseOk, "No")
+                %endif
+              %endif
+%{
+* MD16 End: Re-age customer for current order. *
+%}
+              @Format_Date(V_OEBDTE, "D", F_OEBDTE)
+%{
+*START  Mona H  Sept 24,2008 - Add fields: Must ship date (OEDTE2), Region (CMCRGN)         *
+%}
+              @Format_Date(V_OEDTE2, "D", F_OEDTE2)
+%{
+*END    Mona H  Sept 24,2008 - Add fields: Must ship date (OEDTE2), Region (CMCRGN)         *
+%}
+              @RtvFldDesc("ARCUST=$(customerNumber) and ARCTYP='$(arBalanceType)' and ARCURT='$(arBalanceCurrency)'", "HDCARB", "Char(ARCARB)", arBalanceAmount)
+              @RtvFldDesc("(HCHLCD='$(V_OEHOLD)' and HCTYPE='O')", "HDHLCD", "HCDESC", holdCodeDesc)
+              @RtvFldDesc("(TMCTRM='$(V_CMCTRM)')", "HDTRMS", "TMCTDS", custTermsDesc)
+              @RtvFldDesc("(TMCTRM='$(V_OECTRM)')", "HDTRMS", "TMCTDS", orderTermsDesc)
+              @RtvFldDesc("(LOLOC#='$(V_CMLOC#)')", "HDLCTN", "LOLNA1", billingLocDesc)
+
+              <tr class="$(rowClass)">
+                  %if (formatToPrint == "")
+%{
+* MD02 Begin/End: Remove "Release (order) Hold" column. *
+*                      %if(sec_01 == "Y" && V_OEHOLD != "")
+*                          <td class="colcode"><a href="$(homeURL)$(cGIPath)$(d2wName)/EDIT_DATA$(d2wVarBase)&amp;orderNumber=@dtw_rurlescseq(V_OEORD#)&amp;releaseFlag=H" onClick="return confirm('Release hold on order $(V_OEORD#)')">$(changeImageSml)</a></td>
+*                      %else
+*                          <td class="colcode"></td>
+*                      %endif
+%}
+%{
+* MD02 Begin: Add new credit hold code values. *
+Replaced this line: %if(sec_02 == "Y" && V_OEFL05 == "1")
+%}
+                      %if( (sec_02 == "Y" && V_OEFL05 == "1")
+                          || (sec_02 == "Y" && V_OEFL05 == "3")
+                          || (sec_02 == "Y" && V_OEFL05 == "4")
+                          || (sec_02 == "Y" && V_OEFL05 == "5")
+                          || (sec_02 == "Y" && V_OEFL05 == "6")
+                          || (sec_02 == "Y" && V_OEFL05 == "7")
+                          || (sec_02 == "Y" && V_OEFL05 == "8")
+                          || (sec_02 == "Y" && V_OEFL05 == "9") )
+%{
+* MD02 End: Add new credit hold code values. *
+%}
+%{
+* MD11 Begin: Return user to page from which order was released. *
+%}
+%{ *                          <td class="colcode"><a href="$(homeURL)$(cGIPath)$(d2wName)/EDIT_DATA$(d2wVarBase)&amp;orderNumber=@dtw_rurlescseq(V_OEORD#)&amp;releaseFlag=C" onClick="return confirm('Release credit hold on order $(V_OEORD#)')">$(changeImageSml)</a></td> %}
+                          <td class="colcode"><a href="$(homeURL)$(cGIPath)$(d2wName)/EDIT_DATA$(d2wVarBase)&amp;orderNumber=@dtw_rurlescseq(V_OEORD#)&amp;releaseFlag=C&amp;START_ROW_NUM=@dtw_rurlescseq(START_ROW_NUM)&amp;RPT_MAX_ROWS=@dtw_rurlescseq(RPT_MAX_ROWS)" onClick="return confirm('Release credit hold on order $(V_OEORD#)')">$(changeImageSml)</a></td>
+%{
+* MD11 End: Return user to page from which order was released. *
+%}
+                      %else
+                          <td class="colcode"></td>
+                      %endif
+                  %endif
+                  <td class="colnmbr"><a onClick="saveCurrentURL();" href="$(homeURL)$(cGIPath)SelectOrder.d2w/REPORT$(d2wVarBase)&amp;orderNumber=@dtw_rurlescseq(V_OEORD#)&amp;customerNumber=@dtw_rurlescseq(V_OEBLTO)&amp;customerName=@dtw_rurlescseq(V_CMCNA1)" title="View Order Detail">$(V_OEORD#)</a></td>
+%{
+* MD03 Begin: Link customer number and name to customer select page. *
+* Replaced these lines: <td class="colalph">$(V_OEBLTO)</td>
+*                       <td class="colalph">$(V_CMCNA1)</td>
+%}
+                  <td class="colalph"><a href="$(homeURL)$(cGIPath)CustomerSelect.d2w/REPORT$(d2wVarBase)&amp;customerNumber=$(V_OEBLTO)">$(V_OEBLTO)</a></td>
+                  <td class="colalph"><a href="$(homeURL)$(cGIPath)CustomerSelect.d2w/REPORT$(d2wVarBase)&amp;customerNumber=$(V_OEBLTO)">$(V_CMCNA1)</a></td>
+%{
+* MD03 End: Link customer number and name to customer select page. *
+%}
+                  <td class="coldate">$(F_OEBDTE)</td>
+                  <td class="colalph" $(helpCursor)><span title="$(holdCodeDesc)">$(V_OEHOLD)</span></td>
+                  <td class="colalph" $(helpCursor)><span title="$(custTermsDesc)">$(V_CMCTRM)</span></td>
+%{
+* MD02 Begin: Add selection list for new credit hold code values. *
+*             (Set select current hold code as "selected".)       *
+%}
+                  %if (formatToPrint == "")
+                      %if( (sec_02 == "Y" && V_OEFL05 == "1")
+                          || (sec_02 == "Y" && V_OEFL05 == "3")
+                          || (sec_02 == "Y" && V_OEFL05 == "4")
+                          || (sec_02 == "Y" && V_OEFL05 == "5")
+                          || (sec_02 == "Y" && V_OEFL05 == "6")
+                          || (sec_02 == "Y" && V_OEFL05 == "7")
+                          || (sec_02 == "Y" && V_OEFL05 == "8")
+                          || (sec_02 == "Y" && V_OEFL05 == "9") )
+                          <td class="colcode">
+                              <select id="slt_$(V_OEORD#)">
+                                  <option value="1" %if (V_OEFL05 == "1") selected="selected" %endif >1 </option>
+                                  <option value="2" %if (V_OEFL05 == "2") selected="selected" %endif >2 - Released</option>
+                                  <option value="3" %if (V_OEFL05 == "3") selected="selected" %endif >3 - Acct Svcs</option>
+                                  <option value="4" %if (V_OEFL05 == "4") selected="selected" %endif >4 - Deposit</option>
+                                  <option value="5" %if (V_OEFL05 == "5") selected="selected" %endif >5 - Past Due</option>
+                                  <option value="6" %if (V_OEFL05 == "6") selected="selected" %endif >6 - Dep & PDue</option>
+                                  <option value="7" %if (V_OEFL05 == "7") selected="selected" %endif >7 - CC Auth-Acct Bal</option>
+                                  <option value="8" %if (V_OEFL05 == "8") selected="selected" %endif >8 - CC Invalid</option>
+                                  <option value="9" %if (V_OEFL05 == "9") selected="selected" %endif >9 - CC Declined</option>
+                              </select>
+                          </td>
+                      %else
+                          <td class="colcode"></td>
+                      %endif
+                  %else
+                      <td class="colalph">
+                          %if (V_OEFL05 == "0")
+                              $(V_OEFL05) - Not Processed
+                          %elif (V_OEFL05 == "1")
+                              $(V_OEFL05)
+                          %elif (V_OEFL05 == "2")
+                              $(V_OEFL05) - Released
+                          %elif (V_OEFL05 == "3")
+                              $(V_OEFL05) - Acct Svcs
+                          %elif (V_OEFL05 == "4")
+                              $(V_OEFL05) - Deposit
+                          %elif (V_OEFL05 == "5")
+                              $(V_OEFL05) - Past Due
+                          %elif (V_OEFL05 == "6")
+                              $(V_OEFL05) - Dep & PDue
+                          %elif (V_OEFL05 == "7")
+                              $(V_OEFL05) - CC Auth-Acct Bal
+                          %elif (V_OEFL05 == "8")
+                              $(V_OEFL05) - CC Invalid
+                          %elif (V_OEFL05 == "9")
+                              $(V_OEFL05) - CC Declined
+                          %else
+                              $(V_OEFL05) - Unknown
+                          %endif
+                      </td>
+                  %endif
+%{
+* MD02 End:  Add selection list for new credit hold code values. *
+%}
+                  <td class="colalph" $(helpCursor)><span title="$(orderTermsDesc)">$(V_OECTRM)</span></td>
+                  <td class="colnmbr" $(helpCursor)><span title="$(billingLocDesc)">$(V_CMLOC#)</span></td>
+                  <td class="colnmbr">$(V_OETIVA)</td>
+                  <td class="colnmbr">@DTW_rSUBTRACT(@DTW_rADD($(V_CMCCRL),$(V_CMFCRL)),@DTW_rADD($(arBalanceAmount),$(V_CMCPOB)))</td>
+                  <td class="colnmbr">@DTW_rADD($(V_CMCCRL),$(V_CMFCRL))</td>
+%{
+* MD16 Start: Add column for auto-release. *
+%}
+                  %if (formatToPrint == "")
+                      %if( autoReleaseOk == "Yes" )
+                          <td class="colcode">
+                            Yes
+                          </td>
+                      %else
+                          <td class="colcode">&nbsp;</td>
+                      %endif
+                  %else
+                      <td class="colalph">
+                        %if( autoReleaseOk == "Yes" )
+                          Yes
+                        %else
+                          &nbsp;
+                        %endif
+                      </td>
+                  %endif
+%{
+* MD16 End: Add column for auto-release. *
+%}
+%{
+*START  Mona H  Sept 24,2008 - Add fields: Must ship date (OEDTE2), Region (CMCRGN)         *
+%}
+                  <td class="colnmbr">$(F_OEDTE2)</td>
+                  <td class="colalph">$(V_CMCRGN)</td>
+<td class="colalph">$(V_CMST)</td>
+
+%{
+*END    Mona H  Sept 24,2008 - Add fields: Must ship date (OEDTE2), Region (CMCRGN)         *
+%}
+              </tr>
+          %}
+      </table>
+      %INCLUDE "PageBottom.icl"
+      %INCLUDE "WildCardPrint.icl"
+      $(hrTagAttr)
+      %INCLUDE "Copyright.icl"
+  %}
+%}
+
+%FUNCTION(dtw_directcall) Validate_OE_Hold_Code(INOUT CHAR(64) profileHandle,
+                                                INOUT CHAR(2) dataBaseID,
+                                                INOUT CHAR(1) releaseFlag,
+                                                INOUT DEC(8,0) orderNumber,
+                                                INOUT CHAR(75) error)
+{%EXEC {HOEOCH_W.PGM %}
+%}
+
+%{
+* MD16 Begin: Re-age customer for current order. *
+%}
+%{ Customer A/R Overdue Balance %}
+%FUNCTION(dtw_directcall) CustArBalanceOver(INOUT CHAR(64)  profileHandle,
+                                                  DEC(7,0)  customerNumber,
+                                                  DEC(11,2) arBalanceAmountOver)
+{%EXEC {GCUST01RA.PGM %}
+%}
+%{
+* MD16 End: Re-age customer for current order. *
+%}
+
+%HTML(ENTRY)
+{
+  %INCLUDE "setLibraryList.icl"
+  %INCLUDE "WebReg.icl"
+  %if (formatToPrint != "")
+      @DTW_ASSIGN(RPT_MAX_ROWS, prtMaxRows)
+  %else
+      %if (orderBy == "")
+          @DTW_ASSIGN(orderBy, "CMCNA1U, OEORD#")
+          @DTW_ASSIGN(orderByDisplay, "Name, Order Number")
+          @Save_WebReg_OrderBy(webRegCurFile, profileHandle, d2wName, orderBy, orderByDisplay)
+      %endif
+      @DTW_ASSIGN(RPT_MAX_ROWS, dspMaxRows)
+  %endif
+  @Set_SQL(stmtSQL)
+%}
+
+%HTML(INPUT)
+{
+  %INCLUDE "setLibraryList.icl"
+  @Retrieve_WebReg(webRegCurFile, profileHandle, d2wName, wildCardSearch, orderBy, orderByDisplay, wildCardDisplay)
+  @Set_SQL(stmtSQL)
+%}
+
+%HTML(ORDERBY)
+{
+  %INCLUDE "setLibraryList.icl"
+  %if (sequence == "orderNumber")
+      %if (orderBy == "OEORD#")
+          @DTW_ASSIGN(orderBy, "OEORD# DESC")
+          @DTW_ASSIGN(orderByDisplay, "Order Number (descending)")
+      %else
+          @DTW_ASSIGN(orderBy, "OEORD#")
+          @DTW_ASSIGN(orderByDisplay, "Order Number")
+      %endif
+  %elseif (sequence == "customerNumber")
+      %if (orderBy == "OEBLTO,OEORD#")
+          @DTW_ASSIGN(orderBy, "OEBLTO DESC,OEORD#")
+          @DTW_ASSIGN(orderByDisplay, "Customer Number (descending), Order Number")
+      %else
+          @DTW_ASSIGN(orderBy, "OEBLTO,OEORD#")
+          @DTW_ASSIGN(orderByDisplay, "Customer Number, Order Number")
+      %endif
+  %elseif (sequence == "customerName")
+      %if (orderBy == "CMCNA1U,OEORD#")
+          @DTW_ASSIGN(orderBy, "CMCNA1U DESC,OEORD#")
+          @DTW_ASSIGN(orderByDisplay, "Customer Name (descending), Order Number")
+      %else
+          @DTW_ASSIGN(orderBy, "CMCNA1U,OEORD#")
+          @DTW_ASSIGN(orderByDisplay, "Customer Name, Order Number")
+      %endif
+  %elseif (sequence == "orderDate")
+      %if (orderBy == "OEBDTE,OEORD#")
+          @DTW_ASSIGN(orderBy, "OEBDTE DESC,OEORD#")
+          @DTW_ASSIGN(orderByDisplay, "Order Date (descending), Order Number")
+      %else
+          @DTW_ASSIGN(orderBy, "OEBDTE,OEORD#")
+          @DTW_ASSIGN(orderByDisplay, "Order Date, Order Number")
+      %endif
+  %elseif (sequence == "holdCode")
+      %if (orderBy == "OEHOLD,OEORD#")
+          @DTW_ASSIGN(orderBy, "OEHOLD DESC,OEORD#")
+          @DTW_ASSIGN(orderByDisplay, "Hold Code (descending), Order Number")
+      %else
+          @DTW_ASSIGN(orderBy, "OEHOLD,OEORD#")
+          @DTW_ASSIGN(orderByDisplay, "Hold Code, Order Number")
+      %endif
+  %elseif (sequence == "custTerms")
+      %if (orderBy == "CMCTRM,OEORD#")
+          @DTW_ASSIGN(orderBy, "CMCTRM DESC,OEORD#")
+          @DTW_ASSIGN(orderByDisplay, "Customer Terms (descending), Order Number")
+      %else
+          @DTW_ASSIGN(orderBy, "CMCTRM,OEORD#")
+          @DTW_ASSIGN(orderByDisplay, "Customer Terms, Order Number")
+      %endif
+  %elseif (sequence == "orderTerms")
+      %if (orderBy == "OECTRM,OEORD#")
+          @DTW_ASSIGN(orderBy, "OECTRM DESC,OEORD#")
+          @DTW_ASSIGN(orderByDisplay, "Order Terms (descending), Order Number")
+      %else
+          @DTW_ASSIGN(orderBy, "OECTRM,OEORD#")
+          @DTW_ASSIGN(orderByDisplay, "Order Terms, Order Number")
+      %endif
+  %elseif (sequence == "billingLoc")
+      %if (orderBy == "CMLOC#,OEORD#")
+          @DTW_ASSIGN(orderBy, "CMLOC# DESC,OEORD#")
+          @DTW_ASSIGN(orderByDisplay, "Billing Location (descending), Order Number")
+      %else
+          @DTW_ASSIGN(orderBy, "CMLOC#,OEORD#")
+          @DTW_ASSIGN(orderByDisplay, "Billing Location, Order Number")
+      %endif
+%{
+*START  Mona H  Sept 24,2008 - Add fields: Must ship date (OEDTE2), Region (CMCRGN) ALLOW RESEQUENCING OF CUST REGION       *
+%}
+  %elseif (sequence == "customerRegion")
+      %if (orderBy == "CMCRGN,OEORD#")
+          @DTW_ASSIGN(orderBy, "CMCRGN DESC,OEORD#")
+          @DTW_ASSIGN(orderByDisplay, "Customer Region (descending), Order Number")
+      %else
+          @DTW_ASSIGN(orderBy, "CMCRGN,OEORD#")
+          @DTW_ASSIGN(orderByDisplay, "Customer Region, Order Number")
+      %endif
+%{
+*END    Mona H  Sept 24,2008 - Add fields: Must ship date (OEDTE2), Region (CMCRGN)  ALLOW RESEQUENCING OF CUST REGION      *
+%}
+%{
+* MD02 Begin: Add support for sequence by credit hold value. *
+%}
+  %elseif (sequence == "creditHoldCode")
+      %if (orderBy == "OEFL05,OEORD#")
+          @DTW_ASSIGN(orderBy, "OEFL05 DESC,OEORD#")
+          @DTW_ASSIGN(orderByDisplay, "Credit Hold Code (descending), Order Number")
+      %else
+          @DTW_ASSIGN(orderBy, "OEFL05,OEORD#")
+          @DTW_ASSIGN(orderByDisplay, "Credit Hold Code, Order Number")
+      %endif
+%{
+* MD02 End: Add support for sequence by credit hold value. *
+%}
+  %endif
+		
+  @DTW_ASSIGN(RPT_MAX_ROWS, dspMaxRows)
+  @Save_WebReg_OrderBy(webRegCurFile, profileHandle, d2wName, orderBy, orderByDisplay)
+  @Set_SQL(stmtSQL)
+%}
+		
+%HTML(WILDCARD)
+{
+  %INCLUDE "setLibraryList.icl"
+  @dtw_assign(wildCardTemp, "")
+  @dtw_assign(wildDisplayTemp, "")
+    
+%{
+* MD02 Begin: Add search column for Credit Hold code. *
+%}
+  @Build_WildCard ("OEFL05", "Credit Hold Code", $(srchCreditHold), "", operCreditHold, "A")
+%{
+* MD02 End: Add search column for Credit Hold code. *
+%}
+
+  @Build_WildCard ("CMCNA1U", "Customer Name", $(srchName), "U", operName, "A")
+  @Build_WildCard ("OEORD#", "Order Number", $(srchOrder), "", operOrder, "N")
+  @Build_WildCard ("OEHOLD", "Hold Code", $(srchHold), "U", operHold, "A")
+  @Build_WildCard ("CMCTRM", "Customer Terms", $(srchCTerms), "U", operCTerms, "A")
+  @Build_WildCard ("OECTRM", "Order Terms", $(srchOTerms), "U", operOTerms, "A")
+  @Build_WildCard ("CMLOC#", "Billing Location", $(srchBillingLoc), "", operBillingLoc, "N")
+
+%{
+* Mona H  May 1, 2008 - Add search column Customer #*
+%}
+
+  @Build_WildCard ("OEBLTO", "Customer Number", $(srchCust), "", operCust, "N")
+  @Build_WildCard ("OEBDTE", "Order Date", $(srchOrdDate), "", operOrdDate, "D")
+%{
+* Mona H  May 1, 2008 - Add search column Customer #*
+%}
+
+  @dtw_assign(masterSearchVar, "$(homeURL)$(cGIPath)$(d2wName)/MASTERSEARCH$(d2wVarBase)")
+  %INCLUDE "WildCardUpdate.icl"
+%}
+
+%HTML(Edit_Data)
+{
+  %INCLUDE "setLibraryList.icl"
+  @Validate_OE_Hold_Code(profileHandle, dataBaseID, releaseFlag, orderNumber, error)
+
+  %if (error == "")
+%{
+* MD11 Begin: Return user to page from which order was released. *
+%}
+%{ *      <meta http-equiv="refresh" content="1; URL=$(homeURL)$(cGIPath)$(d2wName)/ENTRY$(d2wVarBase)"> %}
+      <meta http-equiv="refresh" content="1; URL=$(homeURL)$(cGIPath)$(d2wName)/ENTRY$(d2wVarBase)&amp;START_ROW_NUM=@dtw_rurlescseq(START_ROW_NUM)">
+%{
+* MD11 ENd: Return user to page from which order was released. *
+%}
+  %else
+      %INCLUDE "$(docType)"
+      <html>
+          <head>
+              %INCLUDE "$(headInclude)"
+              %INCLUDE "$(genericHead)"
+          </head>
+          <body $(bodyTagAttr)>
+              <!-- Start Of Banner Code -->
+              %INCLUDE "banner.icl"
+              <!-- End Of Banner Code -->
+                  <table $(baseTable)>
+                      @dtw_assign(pageID, "")
+                      <td class="menu">@Menu_Query(profileHandle, dataBaseID, portal, pageID)</td>
+                      <td class="content">
+                          <table $(contentTable)>
+	                          <colgroup>
+	                              <col width="80%">
+	                              <col width="15%">
+                              <tr><td><h1> $(page_title)</h1></td></tr>
+                          </table>
+                          <table $(contentTable)>
+                              <tr><td>$(hrTagAttr)</td></tr>
+    	                       <tr><td>Errors Found: <div class="error"> $(error). </div>
+    		                       Press Back to reenter.
+                              </td></tr>
+                              <tr><td>$(hrTagAttr)</td></tr>
+                              <tr><td>%INCLUDE "Copyright.icl"</td></tr>
+                          </table>
+                      </td>
+                  </table>
+              <!-- Start Of Trailer Code -->
+              %INCLUDE "trailer.icl"
+              <!-- End Of Trailer Code -->
+          </body>
+      </html>
+  %endif
+%}
